@@ -66,8 +66,22 @@
 
     <label id="grantee-label">Usuário MySQL: <input id="grantee-user" placeholder="app_user"></label>
     <label>Host de origem: <input id="grantee-host" value="%" placeholder="%"></label>
-    <label>Privilégios: <input id="privileges" placeholder="SELECT, INSERT, UPDATE, DELETE (ou ALL PRIVILEGES)"></label>
-    <small>Ex: SELECT, INSERT, UPDATE | ALL PRIVILEGES | SELECT</small>
+    <h4>Privilégios</h4>
+    <div style="display:flex;flex-wrap:wrap;gap:2px 16px;margin-bottom:8px;padding:8px;background:#f8fafc;border-radius:4px">
+        {% for p in all_privileges %}
+        <label style="display:inline-flex;align-items:center;gap:4px;font-size:0.82rem;cursor:pointer">
+            <input type="checkbox" class="priv-check priv-all" value="{{ p }}" onchange="onPrivAllChange(this)"> <strong>{{ p }}</strong>
+        </label>
+        {% endfor %}
+    </div>
+    <div id="privileges-grid" style="display:flex;flex-wrap:wrap;gap:2px 16px;padding:8px;background:#f8fafc;border-radius:4px">
+        {% for p in privileges %}
+        <label style="display:inline-flex;align-items:center;gap:4px;font-size:0.82rem;cursor:pointer">
+            <input type="checkbox" class="priv-check" value="{{ p }}"> {{ p }}
+        </label>
+        {% endfor %}
+    </div>
+    <input type="hidden" id="privileges" value="">
 
     <h4>Servidores</h4>
     <div id="server-list" class="server-checkboxes">
@@ -119,6 +133,22 @@
 }
 .tab-btn.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
 .tab-btn:hover { color: #374151; }
+.grant-tooltip {
+    position: fixed;
+    z-index: 9999;
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    max-width: 500px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    pointer-events: none;
+}
+.grant-tooltip .tt-spinner { display: block; padding: 4px; }
+.user-grant-hover { cursor: help; border-bottom: 1px dotted #2563eb; }
 </style>
 
 <script>
@@ -148,15 +178,63 @@ async function loadServerUsers() {
             content.innerHTML = '<p style="color:#6b7280">Nenhum usuário encontrado.</p>';
             return;
         }
-        let html = '<table><thead><tr><th>Usuário</th></tr></thead><tbody>';
+        let html = '<table><thead><tr><th>Usuário</th><th>Tipo</th></tr></thead><tbody>';
         d.users.forEach(u => {
-            html += '<tr><td><code>' + u + '</code></td></tr>';
+            const parts = u.user_host.split('@');
+            const user = parts[0];
+            const host = parts.slice(1).join('@');
+            html += '<tr><td><code class="user-grant-hover" data-server="' + sid + '" data-user="' + user + '" data-host="' + host + '" onmouseenter="showGrantTooltip(event, this)" onmouseleave="hideGrantTooltip()">' + u.user_host + '</code></td>';
+            html += '<td>' + (u.is_role ? '<span class="badge" style="background:#ede9fe;color:#6b21a8">ROLE</span>' : '<span class="badge" style="background:#dbeafe;color:#1e40af">USUÁRIO</span>') + '</td></tr>';
         });
         html += '</tbody></table>';
         content.innerHTML = html;
     } catch(e) {
         content.innerHTML = '<p class="toast-err" style="padding:8px;border-radius:4px">Erro ao conectar.</p>';
     }
+}
+
+let _tooltipEl = null;
+let _tooltipTimer = null;
+
+function hideGrantTooltip() {
+    if (_tooltipTimer) clearTimeout(_tooltipTimer);
+    if (_tooltipEl) { _tooltipEl.remove(); _tooltipEl = null; }
+}
+
+async function showGrantTooltip(event, el) {
+    hideGrantTooltip();
+    _tooltipTimer = setTimeout(async () => {
+        const sid = el.dataset.server;
+        const user = el.dataset.user;
+        const host = el.dataset.host;
+        const tip = document.createElement('div');
+        tip.className = 'grant-tooltip';
+        tip.innerHTML = '<span class="tt-spinner">Carregando grants...</span>';
+        document.body.appendChild(tip);
+        _tooltipEl = tip;
+        positionTooltip(event, tip);
+        try {
+            const r = await fetch('/servers/' + sid + '/users/' + user + '/' + host + '/grants');
+            const d = await r.json();
+            if (d.ok && d.grants.length > 0) {
+                tip.textContent = d.grants.join('\n');
+            } else if (d.ok) {
+                tip.textContent = 'Nenhum grant encontrado.';
+            } else {
+                tip.textContent = 'Erro: ' + d.error;
+            }
+            positionTooltip(event, tip);
+        } catch(e) {
+            tip.textContent = 'Erro ao buscar grants.';
+        }
+    }, 400);
+}
+
+function positionTooltip(event, tip) {
+    const x = event.clientX + 12;
+    const y = event.clientY - 10;
+    tip.style.left = Math.min(x, window.innerWidth - tip.offsetWidth - 10) + 'px';
+    tip.style.top = Math.min(y, window.innerHeight - tip.offsetHeight - 10) + 'px';
 }
 
 function getChecked(cls) {
@@ -281,6 +359,25 @@ function onGranteeTypeChange() {
     document.getElementById('grantee-label').innerHTML = isRole ? 'Role MySQL: <input id="grantee-user" placeholder="app_readonly">' : 'Usuário MySQL: <input id="grantee-user" placeholder="app_user">';
 }
 
+function getSelectedPrivileges() {
+    const allChecked = document.querySelectorAll('.priv-all:checked');
+    if (allChecked.length > 0) {
+        return Array.from(allChecked).map(cb => cb.value).join(', ');
+    }
+    const checked = document.querySelectorAll('.priv-check:not(.priv-all):checked');
+    return Array.from(checked).map(cb => cb.value).join(', ');
+}
+
+function onPrivAllChange(el) {
+    const others = document.querySelectorAll('.priv-check:not(.priv-all)');
+    if (el.checked) {
+        others.forEach(cb => { cb.checked = false; cb.disabled = true; });
+        document.querySelectorAll('.priv-all').forEach(cb => { if (cb !== el) cb.checked = false; });
+    } else {
+        others.forEach(cb => { cb.disabled = false; });
+    }
+}
+
 document.querySelectorAll('.server-check').forEach(cb => {
     cb.addEventListener('change', refreshServerSelection);
 });
@@ -301,11 +398,13 @@ function getSelectedDatabases() {
 async function previewGrants() {
     const serverIds = Array.from(document.querySelectorAll('.server-check:checked')).map(cb => cb.value);
     const isRole = document.getElementById('grantee-type').value === 'role';
+    const privileges = getSelectedPrivileges();
+    if (!privileges) { showToast('Selecione ao menos um privilégio.', false); return; }
     const payload = {
         server_ids: serverIds,
         grantee_user: document.getElementById('grantee-user').value,
         grantee_host: document.getElementById('grantee-host').value,
-        privileges: document.getElementById('privileges').value,
+        privileges: privileges,
         databases: getSelectedDatabases(),
         grantee_type: isRole ? 'role' : 'user'
     };
@@ -340,11 +439,13 @@ async function executeGrants() {
     if (!confirm('Confirma execução dos grants?')) return;
     const serverIds = Array.from(document.querySelectorAll('.server-check:checked')).map(cb => cb.value);
     const isRole = document.getElementById('grantee-type').value === 'role';
+    const privileges = getSelectedPrivileges();
+    if (!privileges) { showToast('Selecione ao menos um privilégio.', false); return; }
     const payload = {
         server_ids: serverIds,
         grantee_user: document.getElementById('grantee-user').value,
         grantee_host: document.getElementById('grantee-host').value,
-        privileges: document.getElementById('privileges').value,
+        privileges: privileges,
         databases: getSelectedDatabases(),
         grantee_type: isRole ? 'role' : 'user'
     };

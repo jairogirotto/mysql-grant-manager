@@ -394,8 +394,8 @@ def mysql_discover_users(server):
     conn = mysql_connect(server)
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT CONCAT(user, '@', host) as user_host FROM mysql.user ORDER BY user, host")
-            users = [row[0] for row in cur.fetchall()]
+            cur.execute("SELECT CONCAT(user, '@', host) as user_host, account_locked FROM mysql.user ORDER BY user, host")
+            users = [{"user_host": row[0], "is_role": row[1] == 'Y'} for row in cur.fetchall()]
         return users
     finally:
         conn.close()
@@ -536,12 +536,35 @@ def servers_users(server_id):
         return jsonify({"ok": False, "error": str(e)})
 
 
+@app.route("/servers/<int:server_id>/users/<user>/<host>/grants")
+@auth_required
+def servers_user_grants(server_id, user, host):
+    db = get_db()
+    server = db.execute("SELECT * FROM servers WHERE id = ?", (server_id,)).fetchone()
+    if not server:
+        return jsonify({"ok": False, "error": "Server not found"}), 404
+    try:
+        u = _validate_mysql_user_or_host(user)
+        h = _validate_mysql_user_or_host(host)
+        conn = mysql_connect(dict(server))
+        try:
+            with conn.cursor() as cur:
+                cur.execute(f"SHOW GRANTS FOR '{u}'@'{h}'")
+                grants = [row[0] for row in cur.fetchall()]
+            return jsonify({"ok": True, "grants": grants})
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
 @app.route("/grants")
 @auth_required
 def grants_page():
     db = get_db()
     servers = db.execute("SELECT * FROM servers ORDER BY name").fetchall()
-    return render_template("grants.html", servers=servers)
+    privileges = sorted(p for p in _ALLOWED_PRIVILEGES if p not in ("ALL", "ALL PRIVILEGES"))
+    return render_template("grants.html", servers=servers, privileges=privileges, all_privileges=["ALL", "ALL PRIVILEGES"])
 
 
 @app.route("/grants/create-user", methods=["POST"])
