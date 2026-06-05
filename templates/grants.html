@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Gerenciar Grants</h1>
+
+<div class="grants-tabs" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid #e5e7eb">
+    <button class="tab-btn active" onclick="switchTab('list-users-tab', this)">Listar Usuários</button>
+    <button class="tab-btn" onclick="switchTab('create-user-tab', this)">Criar Usuário</button>
+    <button class="tab-btn" onclick="switchTab('grant-tab', this)">Conceder Privilégios</button>
+</div>
+
+<!-- ===== Listar Usuários ===== -->
+<div id="list-users-tab" class="form-card tab-content">
+    <h3>Listar Usuários MySQL</h3>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <label style="margin:0">Servidor:
+            <select id="list-users-server" onchange="loadServerUsers()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:4px;margin-left:4px">
+                <option value="">-- selecione --</option>
+                {% for s in servers %}
+                <option value="{{ s.id }}">{{ s.name }} ({{ s.host }})</option>
+                {% endfor %}
+            </select>
+        </label>
+    </div>
+    <div id="list-users-content">
+        <p style="color:#6b7280;font-size:0.85rem">Selecione um servidor para listar os usuários.</p>
+    </div>
+</div>
+
+<!-- ===== Criar Usuário ===== -->
+<div id="create-user-tab" class="form-card tab-content" style="display:none">
+    <h3>Criar Usuário MySQL</h3>
+
+    <label>Usuário MySQL: <input id="create-user-name" placeholder="app_user"></label>
+    <label>Host de origem: <input id="create-user-host" value="%" placeholder="% ou 10.0.0.5"></label>
+    <label>Senha: <input id="create-user-password" type="password" placeholder="Senha para o novo usuário"></label>
+
+    <h4>Servidores</h4>
+    <div class="server-checkboxes">
+        {% for s in servers %}
+        <label class="server-row">
+            <input type="checkbox" class="server-check-create" value="{{ s.id }}">
+            <strong>{{ s.name }}</strong>
+            <code>{{ s.host }}:{{ s.port }}</code>
+        </label>
+        {% endfor %}
+    </div>
+
+    <div style="margin-top:16px">
+        <button class="btn btn-primary" onclick="createUserPreview()">Preview</button>
+        <button class="btn btn-success" onclick="createUserExecute()">Criar Usuário</button>
+    </div>
+    <div id="create-user-preview" style="display:none;margin-top:12px"></div>
+    <div id="create-user-result" style="margin-top:8px"></div>
+</div>
+
+<!-- ===== Conceder Privilégios ===== -->
+<div id="grant-tab" class="form-card tab-content" style="display:none">
+    <h3>Conceder Privilégios</h3>
+
+    <label>Tipo:
+        <select id="grantee-type" onchange="onGranteeTypeChange()" style="width:auto;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px">
+            <option value="user">Usuário</option>
+            <option value="role">Role</option>
+        </select>
+    </label>
+
+    <label id="grantee-label">Usuário MySQL: <input id="grantee-user" placeholder="app_user"></label>
+    <label>Host de origem: <input id="grantee-host" value="%" placeholder="%"></label>
+    <label>Privilégios: <input id="privileges" placeholder="SELECT, INSERT, UPDATE, DELETE (ou ALL PRIVILEGES)"></label>
+    <small>Ex: SELECT, INSERT, UPDATE | ALL PRIVILEGES | SELECT</small>
+
+    <h4>Servidores</h4>
+    <div id="server-list" class="server-checkboxes">
+        {% for s in servers %}
+        <label class="server-row">
+            <input type="checkbox" class="server-check" value="{{ s.id }}" data-name="{{ s.name }}">
+            <strong>{{ s.name }}</strong>
+            <code>{{ s.host }}:{{ s.port }}</code>
+            <span class="db-count" id="grant-db-count-{{ s.id }}">-</span>
+        </label>
+        {% endfor %}
+    </div>
+    <small id="no-db-warning" style="color:#dc2626;display:none">
+        Execute <em>Refresh DBs</em> na página de Servidores antes de prosseguir.
+    </small>
+
+    <div id="db-selectors" style="display:none;margin-top:12px">
+        <h4>Databases por servidor</h4>
+        <div id="per-server-dbs"></div>
+    </div>
+
+    <div style="margin-top:16px">
+        <button class="btn btn-primary" onclick="previewGrants()">Preview</button>
+        <button class="btn btn-success" onclick="executeGrants()">Executar Grants</button>
+    </div>
+
+    <div id="preview-area" style="display:none;margin-top:16px">
+        <h3>Preview</h3>
+        <div id="preview-content"></div>
+    </div>
+    <div id="result-area" style="display:none;margin-top:16px">
+        <h3>Resultado</h3>
+        <div id="result-content"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.tab-btn {
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: #6b7280;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+}
+.tab-btn.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+.tab-btn:hover { color: #374151; }
+</style>
+
+<script>
+function switchTab(tabId, btn) {
+    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById(tabId).style.display = 'block';
+    btn.classList.add('active');
+}
+
+async function loadServerUsers() {
+    const sid = document.getElementById('list-users-server').value;
+    const content = document.getElementById('list-users-content');
+    if (!sid) {
+        content.innerHTML = '<p style="color:#6b7280;font-size:0.85rem">Selecione um servidor para listar os usuários.</p>';
+        return;
+    }
+    content.innerHTML = '<p style="color:#6b7280">Carregando...</p>';
+    try {
+        const r = await fetch('/servers/' + sid + '/users');
+        const d = await r.json();
+        if (!d.ok) {
+            content.innerHTML = '<p class="toast-err" style="padding:8px;border-radius:4px">Erro: ' + d.error + '</p>';
+            return;
+        }
+        if (d.users.length === 0) {
+            content.innerHTML = '<p style="color:#6b7280">Nenhum usuário encontrado.</p>';
+            return;
+        }
+        let html = '<table><thead><tr><th>Usuário</th></tr></thead><tbody>';
+        d.users.forEach(u => {
+            html += '<tr><td><code>' + u + '</code></td></tr>';
+        });
+        html += '</tbody></table>';
+        content.innerHTML = html;
+    } catch(e) {
+        content.innerHTML = '<p class="toast-err" style="padding:8px;border-radius:4px">Erro ao conectar.</p>';
+    }
+}
+
+function getChecked(cls) {
+    return Array.from(document.querySelectorAll('.' + cls + ':checked')).map(cb => cb.value);
+}
+
+// ===== Criar Usuário =====
+async function createUserPreview() {
+    const user = document.getElementById('create-user-name').value.trim();
+    const host = document.getElementById('create-user-host').value.trim() || '%';
+    const password = document.getElementById('create-user-password').value.trim();
+    const serverIds = getChecked('server-check-create');
+
+    if (!user || serverIds.length === 0) {
+        showToast('Preencha usuário e selecione servidores.', false);
+        return;
+    }
+
+    let html = '<h4>Preview</h4>';
+    document.querySelectorAll('.server-check-create:checked').forEach(cb => {
+        html += '<p><strong>' + (cb.parentElement.querySelector('strong')?.textContent || cb.value) + '</strong>: '
+            + '<pre>CREATE USER IF NOT EXISTS \'' + user + '\'@\'' + host + '\' IDENTIFIED BY \'***\'</pre></p>';
+    });
+    document.getElementById('create-user-preview').style.display = 'block';
+    document.getElementById('create-user-preview').innerHTML = html;
+}
+
+async function createUserExecute() {
+    const user = document.getElementById('create-user-name').value.trim();
+    const host = document.getElementById('create-user-host').value.trim() || '%';
+    const password = document.getElementById('create-user-password').value.trim();
+    const serverIds = getChecked('server-check-create');
+
+    if (!user || !password || serverIds.length === 0) {
+        showToast('Preencha usuário, senha e selecione servidores.', false);
+        return;
+    }
+    if (!confirm('Criar usuário ' + user + '@' + host + ' nos servidores selecionados?')) return;
+
+    const r = await fetch('/grants/create-user', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
+        body: JSON.stringify({grantee_user: user, grantee_host: host, password: password, server_ids: serverIds})
+    });
+    const d = await r.json();
+    let html = '<ul>';
+    d.results.forEach(r => {
+        html += '<li><strong>' + r.server_name + '</strong>: ';
+        html += r.ok ? '<span class="badge badge-ok">OK</span>' : '<span class="badge badge-err">ERRO: ' + r.error + '</span>';
+        html += '</li>';
+    });
+    html += '</ul>';
+    document.getElementById('create-user-result').innerHTML = html;
+    document.getElementById('create-user-preview').style.display = 'none';
+    if (d.ok) showToast('Usuários criados.', true);
+}
+
+// ===== Conceder Privilégios =====
+async function loadDatabasesForServer(sid) {
+    const r = await fetch('/servers/' + sid + '/databases');
+    const dbs = await r.json();
+    document.getElementById('grant-db-count-' + sid).textContent = dbs.length + ' DBs';
+    return dbs;
+}
+
+async function refreshServerSelection() {
+    const checked = document.querySelectorAll('.server-check:checked');
+    const container = document.getElementById('per-server-dbs');
+    const area = document.getElementById('db-selectors');
+    const warning = document.getElementById('no-db-warning');
+
+    if (checked.length === 0) {
+        area.style.display = 'none';
+        return;
+    }
+
+    let allHaveDbs = true;
+    container.innerHTML = '';
+
+    for (const cb of checked) {
+        const sid = cb.value;
+        const name = cb.dataset.name;
+        let dbs = await loadDatabasesForServer(sid);
+
+        if (dbs.length === 0) {
+            allHaveDbs = false;
+        }
+
+        const div = document.createElement('div');
+        div.className = 'server-db-group';
+        div.innerHTML = '<strong>' + name + '</strong>';
+
+        if (dbs.length === 0) {
+            div.innerHTML += ' <em style="color:#dc2626">Nenhuma DB — execute Refresh</em>';
+        } else {
+            const selectAll = document.createElement('label');
+            selectAll.innerHTML = '<input type="checkbox" class="db-select-all" onchange="toggleAllDbs(this, ' + sid + ')"> Todas';
+            div.appendChild(selectAll);
+
+            dbs.forEach(db => {
+                const lbl = document.createElement('label');
+                lbl.innerHTML = '<input type="checkbox" class="db-check" data-server="' + sid + '" value="' + db + '"> ' + db;
+                div.appendChild(lbl);
+            });
+        }
+
+        container.appendChild(div);
+    }
+
+    area.style.display = 'block';
+    warning.style.display = allHaveDbs ? 'none' : 'block';
+}
+
+function toggleAllDbs(el, sid) {
+    document.querySelectorAll('.db-check[data-server="' + sid + '"]').forEach(cb => {
+        cb.checked = el.checked;
+    });
+}
+
+function onGranteeTypeChange() {
+    const isRole = document.getElementById('grantee-type').value === 'role';
+    document.getElementById('grantee-label').innerHTML = isRole ? 'Role MySQL: <input id="grantee-user" placeholder="app_readonly">' : 'Usuário MySQL: <input id="grantee-user" placeholder="app_user">';
+}
+
+document.querySelectorAll('.server-check').forEach(cb => {
+    cb.addEventListener('change', refreshServerSelection);
+});
+
+function getSelectedDatabases() {
+    const result = {};
+    document.querySelectorAll('.db-check:checked').forEach(cb => {
+        const sid = cb.dataset.server;
+        if (!result[sid]) result[sid] = [];
+        result[sid].push(cb.value);
+    });
+    document.querySelectorAll('.server-check:checked').forEach(cb => {
+        if (!result[cb.value]) result[cb.value] = [];
+    });
+    return result;
+}
+
+async function previewGrants() {
+    const serverIds = Array.from(document.querySelectorAll('.server-check:checked')).map(cb => cb.value);
+    const isRole = document.getElementById('grantee-type').value === 'role';
+    const payload = {
+        server_ids: serverIds,
+        grantee_user: document.getElementById('grantee-user').value,
+        grantee_host: document.getElementById('grantee-host').value,
+        privileges: document.getElementById('privileges').value,
+        databases: getSelectedDatabases(),
+        grantee_type: isRole ? 'role' : 'user'
+    };
+
+    const r = await fetch('/grants/preview', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
+        body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+
+    const area = document.getElementById('preview-area');
+    const content = document.getElementById('preview-content');
+
+    if (!d.ok) {
+        content.innerHTML = '<div class="toast-err">' + d.error + '</div>';
+        area.style.display = 'block';
+        return;
+    }
+
+    let html = '';
+    d.preview.forEach(p => {
+        html += '<h4>' + p.server_name + ' (' + p.server_host + ')</h4>';
+        html += '<p>Databases: ' + p.databases.map(d => '<code>' + d + '</code>').join(', ') + '</p>';
+        html += '<pre>' + p.statements.join('\n') + '</pre>';
+    });
+    content.innerHTML = html;
+    area.style.display = 'block';
+}
+
+async function executeGrants() {
+    if (!confirm('Confirma execução dos grants?')) return;
+    const serverIds = Array.from(document.querySelectorAll('.server-check:checked')).map(cb => cb.value);
+    const isRole = document.getElementById('grantee-type').value === 'role';
+    const payload = {
+        server_ids: serverIds,
+        grantee_user: document.getElementById('grantee-user').value,
+        grantee_host: document.getElementById('grantee-host').value,
+        privileges: document.getElementById('privileges').value,
+        databases: getSelectedDatabases(),
+        grantee_type: isRole ? 'role' : 'user'
+    };
+
+    const r = await fetch('/grants/execute', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
+        body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+
+    const area = document.getElementById('result-area');
+    const content = document.getElementById('result-content');
+
+    let html = '<ul>';
+    d.results.forEach(r => {
+        html += '<li><strong>' + r.server_name + '</strong>: ';
+        html += r.ok ? '<span class="badge badge-ok">OK</span>' : '<span class="badge badge-err">ERRO: ' + r.error + '</span>';
+        html += '</li>';
+    });
+    html += '</ul>';
+    content.innerHTML = html;
+    area.style.display = 'block';
+    document.getElementById('preview-area').style.display = 'none';
+}
+</script>
+{% endblock %}

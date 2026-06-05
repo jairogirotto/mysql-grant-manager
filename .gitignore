@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+app.db
+.encryption_key
+.secret_key
+*.session
+session-*
+*.log
+/data/

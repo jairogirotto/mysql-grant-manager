@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+app.db
+.encryption_key
+.secret_key
+venv/
+*.md
+deploy.sh
+mysql-grant-manager.service
+session-*.txt

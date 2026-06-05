@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Servidores MySQL</h1>
+
+<button class="btn btn-primary" onclick="document.getElementById('add-form').style.display='block'">+ Novo Servidor</button>
+
+<div id="add-form" class="form-card" style="display:none">
+    <h3>Adicionar Servidor</h3>
+    <form method="POST" action="{{ url_for('servers_add') }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <label>Nome: <input name="name" required placeholder="Ex: Produção SP"></label>
+        <label>Host: <input name="host" required placeholder="10.0.0.1"></label>
+        <label>Porta: <input name="port" type="number" value="3306"></label>
+        <label>Usuário admin: <input name="admin_user" required placeholder="root"></label>
+        <label>Senha: <input name="admin_password" type="password" required></label>
+        <button class="btn btn-primary">Salvar</button>
+        <button type="button" class="btn" onclick="this.closest('#add-form').style.display='none'">Cancelar</button>
+    </form>
+</div>
+
+{% if servers %}
+<table>
+    <thead>
+        <tr>
+            <th>Nome</th>
+            <th>Host</th>
+            <th>Porta</th>
+            <th>Usuário</th>
+            <th>Databases</th>
+            <th>Conexão</th>
+            <th>Ações</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for s in servers %}
+        <tr>
+            <td>{{ s.name }}</td>
+            <td><code>{{ s.host }}:{{ s.port }}</code></td>
+            <td>{{ s.port }}</td>
+            <td><code>{{ s.admin_user }}</code></td>
+            <td id="db-count-{{ s.id }}">?</td>
+            <td id="conn-status-{{ s.id }}">-</td>
+            <td class="actions">
+                <button class="btn btn-sm" onclick="editServer({{ {'id': s.id, 'name': s.name, 'host': s.host, 'port': s.port, 'admin_user': s.admin_user} | tojson }})">Editar</button>
+                <button class="btn btn-sm btn-test" onclick="testConnection({{ s.id }})">Testar</button>
+                <button class="btn btn-sm btn-refresh" onclick="refreshDatabases({{ s.id }})">Refresh DBs</button>
+                <form method="POST" action="{{ url_for('servers_delete', server_id=s.id) }}" style="display:inline" onsubmit="return confirm('Remover servidor {{ s.name }}?')">
+                    <button class="btn btn-sm btn-danger">Remover</button>
+                </form>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>Nenhum servidor cadastrado.</p>
+{% endif %}
+
+<div id="edit-form" class="form-card" style="display:none">
+    <h3>Editar Servidor</h3>
+    <form method="POST" id="edit-form-inner">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="server_id" id="edit-id">
+        <label>Nome: <input name="name" id="edit-name" required></label>
+        <label>Host: <input name="host" id="edit-host" required></label>
+        <label>Porta: <input name="port" id="edit-port" type="number" value="3306"></label>
+        <label>Usuário admin: <input name="admin_user" id="edit-user" required></label>
+        <label>Senha (deixe em branco para manter): <input name="admin_password" type="password"></label>
+        <button class="btn btn-primary">Salvar</button>
+        <button type="button" class="btn" onclick="document.getElementById('edit-form').style.display='none'">Cancelar</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function editServer(s) {
+    document.getElementById('edit-id').value = s.id;
+    document.getElementById('edit-name').value = s.name;
+    document.getElementById('edit-host').value = s.host;
+    document.getElementById('edit-port').value = s.port;
+    document.getElementById('edit-user').value = s.admin_user;
+    document.getElementById('edit-form-inner').action = '/servers/' + s.id + '/edit';
+    document.getElementById('edit-form').style.display = 'block';
+    document.getElementById('edit-form').scrollIntoView({behavior:'smooth'});
+}
+
+async function testConnection(id) {
+    const cell = document.getElementById('conn-status-' + id);
+    cell.textContent = '...';
+    try {
+        const r = await fetch('/servers/' + id + '/test', {method:'POST', headers: {'X-CSRF-Token': getCSRFToken()}});
+        const d = await r.json();
+        cell.innerHTML = d.ok ? '<span class="badge badge-ok">OK</span>' : '<span class="badge badge-err">FALHA</span>';
+        showToast(d.ok ? 'Conexão OK' : 'Falha: ' + d.error, d.ok);
+    } catch(e) {
+        cell.innerHTML = '<span class="badge badge-err">ERRO</span>';
+    }
+}
+
+async function refreshDatabases(id) {
+    const btn = event.target;
+    toggleSpinner(btn, true);
+    const cell = document.getElementById('db-count-' + id);
+    try {
+        const r = await fetch('/servers/' + id + '/refresh', {method:'POST', headers: {'X-CSRF-Token': getCSRFToken()}});
+        const d = await r.json();
+        if (d.ok) {
+            cell.textContent = d.databases.length;
+            showToast(d.databases.length + ' databases encontradas', true);
+        } else {
+            cell.textContent = 'erro';
+            showToast('Falha: ' + d.error, false);
+        }
+    } catch(e) {
+        cell.textContent = 'erro';
+    }
+    toggleSpinner(btn, false);
+}
+
+// Load database counts on page load
+document.querySelectorAll('[id^="db-count-"]').forEach(el => {
+    const sid = el.id.replace('db-count-', '');
+    fetch('/servers/' + sid + '/databases')
+        .then(r => r.json())
+        .then(dbs => { el.textContent = dbs.length; })
+        .catch(() => { el.textContent = '?'; });
+});
+</script>
+{% endblock %}

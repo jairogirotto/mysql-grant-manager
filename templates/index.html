@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="cards">
+    <div class="card">
+        <div class="card-value">{{ server_count }}</div>
+        <div class="card-label">Servidores</div>
+    </div>
+    <div class="card">
+        <div class="card-value">{{ role_count }}</div>
+        <div class="card-label">Roles</div>
+    </div>
+    <div class="card">
+        <div class="card-value">{{ history_count }}</div>
+        <div class="card-label">Grants executados</div>
+    </div>
+</div>
+
+<h2>Últimos grants</h2>
+{% if recent %}
+<table>
+    <thead>
+        <tr>
+            <th>Data</th>
+            <th>Servidor</th>
+            <th>Usuário</th>
+            <th>Host</th>
+            <th>Privilégios</th>
+            <th>Databases</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for r in recent %}
+        <tr>
+            <td>{{ r.executed_at[:19] }}</td>
+            <td>{{ r.server_name }}</td>
+            <td><code>{{ r.grantee_user }}@{{ r.grantee_host }}</code></td>
+            <td>{{ r.grantee_host }}</td>
+            <td><code>{{ r.privileges }}</code></td>
+            <td>
+                {% for db in (r.databases | from_json) %}
+                <code>{{ db }}</code>{% if not loop.last %}, {% endif %}
+                {% endfor %}
+            </td>
+            <td>
+                {% if r.success %}
+                <span class="badge badge-ok">OK</span>
+                {% else %}
+                <span class="badge badge-err" title="{{ r.error_message }}">ERRO</span>
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>Nenhum grant executado ainda.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <title>MySQL Grant Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav>
+        <a href="{{ url_for('index') }}" class="logo">MySQL Grant Manager</a>
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">Dashboard</a>
+            <a href="{{ url_for('servers_list') }}">Servidores</a>
+            <a href="{{ url_for('grants_page') }}">Grants</a>
+            <a href="{{ url_for('roles_page') }}">Roles</a>
+            <a href="{{ url_for('history_page') }}">Histórico</a>
+        </div>
+    </nav>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    <script>
+        function getCSRFToken() {
+            return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        }
+
+        function showToast(msg, ok) {
+            const toast = document.createElement("div");
+            toast.className = "toast " + (ok ? "toast-ok" : "toast-err");
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
+
+        function toggleSpinner(btn, show) {
+            btn.disabled = show;
+            btn.querySelector(".spinner")?.remove();
+            if (show) {
+                const sp = document.createElement("span");
+                sp.className = "spinner";
+                sp.textContent = "⏳ ";
+                btn.prepend(sp);
+            }
+        }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

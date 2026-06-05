@@ -1,0 +1,14 @@
+[Unit]
+Description=MySQL Grant Manager
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/mysql-grant-manager
+ExecStart=/opt/mysql-grant-manager/venv/bin/gunicorn --workers 2 --bind 0.0.0.0:5050 app:app
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
