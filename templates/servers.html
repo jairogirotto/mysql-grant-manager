@@ -45,6 +45,7 @@
                 <button class="btn btn-sm btn-test" onclick="testConnection({{ s.id }})">Testar</button>
                 <button class="btn btn-sm btn-refresh" onclick="refreshDatabases({{ s.id }})">Refresh DBs</button>
                 <form method="POST" action="{{ url_for('servers_delete', server_id=s.id) }}" style="display:inline" onsubmit="return confirm('Remover servidor {{ s.name }}?')">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
                     <button class="btn btn-sm btn-danger">Remover</button>
                 </form>
             </td>
