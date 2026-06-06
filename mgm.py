@@ -37,9 +37,32 @@ def from_json_filter(value):
     return json.loads(value)
 
 
+@app.template_filter("dtfmt")
+def datetime_format(value):
+    if value is None:
+        return ""
+    return value.strftime("%Y-%m-%d %H:%M:%S")
+
+
+class _DbWrapper:
+    def __init__(self, conn):
+        self.conn = conn
+
+    def execute(self, query, args=None):
+        cur = self.conn.cursor()
+        cur.execute(query, args)
+        return cur
+
+    def commit(self):
+        self.conn.commit()
+
+    def close(self):
+        self.conn.close()
+
+
 def get_db():
     if "db" not in g:
-        g.db = pymysql.connect(
+        conn = pymysql.connect(
             host=DB_HOST,
             port=DB_PORT,
             user=DB_USER,
@@ -48,6 +71,7 @@ def get_db():
             charset="utf8mb4",
             cursorclass=pymysql.cursors.DictCursor,
         )
+        g.db = _DbWrapper(conn)
     return g.db
 
 
@@ -217,7 +241,7 @@ def init_db():
                 CREATE TABLE IF NOT EXISTS server_databases (
                     id INTEGER PRIMARY KEY AUTO_INCREMENT,
                     server_id INTEGER NOT NULL,
-                    database_name TEXT NOT NULL,
+                    database_name VARCHAR(255) NOT NULL,
                     refreshed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
                     UNIQUE(server_id, database_name)
@@ -230,13 +254,13 @@ def init_db():
                     server_name TEXT NOT NULL,
                     grantee_user TEXT NOT NULL,
                     grantee_host TEXT NOT NULL,
-                    privileges TEXT NOT NULL DEFAULT '',
-                    databases TEXT NOT NULL DEFAULT '[]',
+                    privileges VARCHAR(2000) NOT NULL DEFAULT '',
+                    `databases` VARCHAR(2000) NOT NULL DEFAULT '[]',
                     grant_statement TEXT NOT NULL,
                     executed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     success INTEGER NOT NULL DEFAULT 1,
                     error_message TEXT,
-                    grant_type TEXT NOT NULL DEFAULT 'privilege',
+                    grant_type VARCHAR(50) NOT NULL DEFAULT 'privilege',
                     FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE SET NULL
                 )
             """)
@@ -244,7 +268,7 @@ def init_db():
                 CREATE TABLE IF NOT EXISTS roles (
                     id INTEGER PRIMARY KEY AUTO_INCREMENT,
                     server_id INTEGER NOT NULL,
-                    role_name TEXT NOT NULL,
+                    role_name VARCHAR(255) NOT NULL,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
                     UNIQUE(server_id, role_name)
@@ -254,9 +278,9 @@ def init_db():
                 CREATE TABLE IF NOT EXISTS role_grants (
                     id INTEGER PRIMARY KEY AUTO_INCREMENT,
                     server_id INTEGER NOT NULL,
-                    role_name TEXT NOT NULL,
+                    role_name VARCHAR(255) NOT NULL,
                     grantee_user TEXT NOT NULL,
-                    grantee_host TEXT NOT NULL DEFAULT '%',
+                    grantee_host VARCHAR(255) NOT NULL DEFAULT '%',
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
                 )
@@ -447,9 +471,9 @@ def mysql_discover_users(server):
 @auth_required
 def index():
     db = get_db()
-    server_count = db.execute("SELECT COUNT(*) FROM servers").fetchone()[0]
-    history_count = db.execute("SELECT COUNT(*) FROM grant_history").fetchone()[0]
-    role_count = db.execute("SELECT COUNT(*) FROM roles").fetchone()[0]
+    server_count = db.execute("SELECT COUNT(*) AS cnt FROM servers").fetchone()["cnt"]
+    history_count = db.execute("SELECT COUNT(*) AS cnt FROM grant_history").fetchone()["cnt"]
+    role_count = db.execute("SELECT COUNT(*) AS cnt FROM roles").fetchone()["cnt"]
     recent = db.execute(
         "SELECT * FROM grant_history ORDER BY executed_at DESC LIMIT 10"
     ).fetchall()
@@ -644,7 +668,7 @@ def grants_create_user():
 
             stmt = f"CREATE USER IF NOT EXISTS '{grantee_user}'@'{grantee_host}' IDENTIFIED BY '***'"
             db.execute(
-                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success) "
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 1)",
                 (sid, server["name"], grantee_user, grantee_host, "CREATE USER", "[]", stmt),
             )
@@ -653,7 +677,7 @@ def grants_create_user():
         except Exception as e:
             stmt = f"CREATE USER IF NOT EXISTS '{grantee_user}'@'{grantee_host}'"
             db.execute(
-                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, error_message) "
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, error_message) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s)",
                 (sid, server["name"], grantee_user, grantee_host, "CREATE USER", "[]", stmt, str(e)),
             )
@@ -763,7 +787,7 @@ def grants_execute():
             execute_grant(dict(server), grantee_user, grantee_host, privileges, dbs)
             stmt = f"GRANT {privileges} ON {', '.join('`' + d + '`.*' for d in dbs)} TO '{grantee_user}'@'{grantee_host}'"
             db.execute(
-                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success) "
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 1)",
                 (
                     sid,
@@ -780,7 +804,7 @@ def grants_execute():
         except Exception as e:
             stmt = f"GRANT {privileges} ON {', '.join('`' + d + '`.*' for d in dbs)} TO '{grantee_user}'@'{grantee_host}'"
             db.execute(
-                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, error_message) "
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, error_message) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s)",
                 (
                     sid,
@@ -906,7 +930,7 @@ def roles_create():
             )
             stmt = f"CREATE ROLE IF NOT EXISTS '{role_name}'"
             db.execute(
-                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, grant_type) "
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, grant_type) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'role')",
                 (sid, server["name"], role_name, "%", "CREATE ROLE", "[]", stmt),
             )
@@ -915,7 +939,7 @@ def roles_create():
         except Exception as e:
             stmt = f"CREATE ROLE IF NOT EXISTS '{role_name}'"
             db.execute(
-                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, error_message, grant_type) "
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, error_message, grant_type) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, 'role')",
                 (sid, server["name"], role_name, "%", "CREATE ROLE", "[]", stmt, str(e)),
             )
@@ -955,7 +979,7 @@ def roles_grant():
             )
             stmt = f"GRANT '{role_name}' TO '{grantee_user}'@'{grantee_host}'"
             db.execute(
-                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, grant_type) "
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, grant_type) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'role')",
                 (sid, server["name"], grantee_user, grantee_host, role_name, "[]", stmt),
             )
@@ -964,7 +988,7 @@ def roles_grant():
         except Exception as e:
             stmt = f"GRANT '{role_name}' TO '{grantee_user}'@'{grantee_host}'"
             db.execute(
-                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, error_message, grant_type) "
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, error_message, grant_type) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, 'role')",
                 (sid, server["name"], grantee_user, grantee_host, role_name, "[]", stmt, str(e)),
             )
@@ -1004,7 +1028,7 @@ def roles_revoke():
             )
             stmt = f"REVOKE '{role_name}' FROM '{grantee_user}'@'{grantee_host}'"
             db.execute(
-                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, grant_type) "
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, grant_type) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'role')",
                 (sid, server["name"], grantee_user, grantee_host, role_name, "[]", stmt),
             )
@@ -1013,7 +1037,7 @@ def roles_revoke():
         except Exception as e:
             stmt = f"REVOKE '{role_name}' FROM '{grantee_user}'@'{grantee_host}'"
             db.execute(
-                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, error_message, grant_type) "
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, error_message, grant_type) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, 'role')",
                 (sid, server["name"], grantee_user, grantee_host, role_name, "[]", stmt, str(e)),
             )
@@ -1044,7 +1068,7 @@ def roles_drop(server_id):
         db.execute("DELETE FROM role_grants WHERE server_id = %s AND role_name = %s", (server_id, role_name))
         stmt = f"DROP ROLE '{role_name}'"
         db.execute(
-            "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, grant_type) "
+            "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, grant_type) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'role')",
             (server_id, server["name"], role_name, "%", "DROP ROLE", "[]", stmt),
         )
@@ -1053,7 +1077,7 @@ def roles_drop(server_id):
     except Exception as e:
         stmt = f"DROP ROLE '{role_name}'"
         db.execute(
-            "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, error_message, grant_type) "
+            "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, error_message, grant_type) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, 'role')",
             (server_id, server["name"], role_name, "%", "DROP ROLE", "[]", stmt, str(e)),
         )
@@ -1087,7 +1111,7 @@ def roles_set_default():
             mysql_set_default_role(dict(server), grantee_user, grantee_host, default_role)
             stmt = f"SET DEFAULT ROLE '{default_role}' TO '{grantee_user}'@'{grantee_host}'"
             db.execute(
-                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, grant_type) "
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, grant_type) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'role')",
                 (sid, server["name"], grantee_user, grantee_host, default_role, "[]", stmt),
             )
@@ -1096,7 +1120,7 @@ def roles_set_default():
         except Exception as e:
             stmt = f"SET DEFAULT ROLE '{default_role}' TO '{grantee_user}'@'{grantee_host}'"
             db.execute(
-                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, error_message, grant_type) "
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, error_message, grant_type) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, 'role')",
                 (sid, server["name"], grantee_user, grantee_host, default_role, "[]", stmt, str(e)),
             )

@@ -34,7 +34,7 @@
     <tbody>
     {% for r in recent %}
         <tr>
-            <td>{{ r.executed_at[:19] }}</td>
+            <td>{{ r.executed_at|dtfmt }}</td>
             <td>{{ r.server_name }}</td>
             <td><code>{{ r.grantee_user }}@{{ r.grantee_host }}</code></td>
             <td>{{ r.grantee_host }}</td>

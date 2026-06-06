@@ -20,7 +20,7 @@
     <tbody>
     {% for r in history %}
         <tr>
-            <td>{{ r.executed_at[:19] }}</td>
+            <td>{{ r.executed_at|dtfmt }}</td>
             <td><span class="badge" style="background:{% if r.grant_type == 'role' %}#ede9fe;color:#5b21b6{% else %}#dbeafe;color:#1e40af{% endif %}">{{ r.grant_type }}</span></td>
             <td>{{ r.server_name }}</td>
             <td><code>{{ r.grantee_user }}</code></td>

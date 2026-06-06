@@ -23,5 +23,5 @@ except Exception:
 done
 
 echo "MySQL pronto. Inicializando banco..."
-python3 -c "from app import init_db; init_db()"
-exec gunicorn --workers 2 --bind 0.0.0.0:5050 app:app
+python3 -c "from mgm import init_db; init_db()"
+exec gunicorn --workers 2 --bind 0.0.0.0:5050 mgm:app

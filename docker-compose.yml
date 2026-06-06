@@ -10,6 +10,7 @@ services:
       MYSQL_PASSWORD: ${MGM_DB_PASS:-mgm}
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./initdb:/docker-entrypoint-initdb.d
     ports:
       - "3306:3306"
     healthcheck:
@@ -19,7 +20,7 @@ services:
       retries: 10
 
   app:
-    build: .
+    image: mgm:latest
     ports:
       - "5050:5050"
     environment:
