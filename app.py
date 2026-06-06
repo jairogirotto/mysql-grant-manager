@@ -1,19 +1,23 @@
 import os
 import re
 import secrets
-import sqlite3
 import json
-from datetime import datetime, timezone
 from functools import wraps
 
 from flask import Flask, Response, render_template, request, redirect, url_for, jsonify, g, session
 from cryptography.fernet import Fernet
 import pymysql
+import pymysql.cursors
 
 DATA_DIR = os.environ.get("MGM_DATA_DIR", "/var/lib/mysql-grant-manager")
-DB_PATH = os.path.join(DATA_DIR, "app.db")
 KEY_PATH = os.path.join(DATA_DIR, ".encryption_key")
 SECRET_KEY_PATH = os.path.join(DATA_DIR, ".secret_key")
+
+DB_HOST = os.environ.get("MGM_DB_HOST", "127.0.0.1")
+DB_PORT = int(os.environ.get("MGM_DB_PORT", 3306))
+DB_USER = os.environ.get("MGM_DB_USER", "mgm")
+DB_PASS = os.environ.get("MGM_DB_PASS", "mgm")
+DB_NAME = os.environ.get("MGM_DB_NAME", "mysql_grant_manager")
 
 app = Flask(__name__)
 
@@ -35,9 +39,15 @@ def from_json_filter(value):
 
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
+        g.db = pymysql.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASS,
+            database=DB_NAME,
+            charset="utf8mb4",
+            cursorclass=pymysql.cursors.DictCursor,
+        )
     return g.db
 
 
@@ -45,7 +55,10 @@ def get_db():
 def close_db(exception):
     db = g.pop("db", None)
     if db is not None:
-        db.close()
+        try:
+            db.close()
+        except Exception:
+            pass
 
 
 def get_cipher():
@@ -163,68 +176,94 @@ def csrf_protect(f):
 
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
-    db = sqlite3.connect(DB_PATH)
-    db.executescript("""
-        CREATE TABLE IF NOT EXISTS servers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            host TEXT NOT NULL,
-            port INTEGER DEFAULT 3306,
-            admin_user TEXT NOT NULL,
-            admin_password TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
 
-        CREATE TABLE IF NOT EXISTS server_databases (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            server_id INTEGER NOT NULL,
-            database_name TEXT NOT NULL,
-            refreshed_at TEXT NOT NULL DEFAULT (datetime('now')),
-            FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
-            UNIQUE(server_id, database_name)
-        );
-
-        CREATE TABLE IF NOT EXISTS grant_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            server_id INTEGER NOT NULL,
-            server_name TEXT NOT NULL,
-            grantee_user TEXT NOT NULL,
-            grantee_host TEXT NOT NULL,
-            privileges TEXT NOT NULL DEFAULT '',
-            databases TEXT NOT NULL DEFAULT '[]',
-            grant_statement TEXT NOT NULL,
-            executed_at TEXT NOT NULL DEFAULT (datetime('now')),
-            success INTEGER NOT NULL DEFAULT 1,
-            error_message TEXT,
-            grant_type TEXT NOT NULL DEFAULT 'privilege',
-            FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE SET NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS roles (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            server_id INTEGER NOT NULL,
-            role_name TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
-            UNIQUE(server_id, role_name)
-        );
-
-        CREATE TABLE IF NOT EXISTS role_grants (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            server_id INTEGER NOT NULL,
-            role_name TEXT NOT NULL,
-            grantee_user TEXT NOT NULL,
-            grantee_host TEXT NOT NULL DEFAULT '%',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
-        );
-    """)
+    conn = pymysql.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        user=DB_USER,
+        password=DB_PASS,
+        charset="utf8mb4",
+    )
     try:
-        db.execute("ALTER TABLE grant_history ADD COLUMN grant_type TEXT NOT NULL DEFAULT 'privilege'")
-    except sqlite3.OperationalError:
-        pass
-    db.commit()
-    db.close()
+        with conn.cursor() as cur:
+            cur.execute(f"CREATE DATABASE IF NOT EXISTS `{DB_NAME}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+        conn.commit()
+    finally:
+        conn.close()
+
+    db = pymysql.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        user=DB_USER,
+        password=DB_PASS,
+        database=DB_NAME,
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+    )
+    try:
+        with db.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS servers (
+                    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+                    name TEXT NOT NULL,
+                    host TEXT NOT NULL,
+                    port INTEGER DEFAULT 3306,
+                    admin_user TEXT NOT NULL,
+                    admin_password TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS server_databases (
+                    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+                    server_id INTEGER NOT NULL,
+                    database_name TEXT NOT NULL,
+                    refreshed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+                    UNIQUE(server_id, database_name)
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS grant_history (
+                    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+                    server_id INTEGER NOT NULL,
+                    server_name TEXT NOT NULL,
+                    grantee_user TEXT NOT NULL,
+                    grantee_host TEXT NOT NULL,
+                    privileges TEXT NOT NULL DEFAULT '',
+                    databases TEXT NOT NULL DEFAULT '[]',
+                    grant_statement TEXT NOT NULL,
+                    executed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    success INTEGER NOT NULL DEFAULT 1,
+                    error_message TEXT,
+                    grant_type TEXT NOT NULL DEFAULT 'privilege',
+                    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE SET NULL
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS roles (
+                    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+                    server_id INTEGER NOT NULL,
+                    role_name TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+                    UNIQUE(server_id, role_name)
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS role_grants (
+                    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+                    server_id INTEGER NOT NULL,
+                    role_name TEXT NOT NULL,
+                    grantee_user TEXT NOT NULL,
+                    grantee_host TEXT NOT NULL DEFAULT '%',
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+                )
+            """)
+        db.commit()
+    finally:
+        db.close()
 
 
 def mysql_connect(server):
@@ -253,7 +292,7 @@ def discover_databases(server):
 
 def refresh_server_databases(server_id):
     db = get_db()
-    server = db.execute("SELECT * FROM servers WHERE id = ?", (server_id,)).fetchone()
+    server = db.execute("SELECT * FROM servers WHERE id = %s", (server_id,)).fetchone()
     if not server:
         return None
 
@@ -262,12 +301,11 @@ def refresh_server_databases(server_id):
     except Exception as e:
         raise e
 
-    db.execute("DELETE FROM server_databases WHERE server_id = ?", (server_id,))
-    now = datetime.now(timezone.utc).isoformat()
+    db.execute("DELETE FROM server_databases WHERE server_id = %s", (server_id,))
     for dbname in databases:
         db.execute(
-            "INSERT INTO server_databases (server_id, database_name, refreshed_at) VALUES (?, ?, ?)",
-            (server_id, dbname, now),
+            "INSERT INTO server_databases (server_id, database_name) VALUES (%s, %s)",
+            (server_id, dbname),
         )
     db.commit()
     return databases
@@ -444,7 +482,7 @@ def servers_add():
 
     db = get_db()
     db.execute(
-        "INSERT INTO servers (name, host, port, admin_user, admin_password) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO servers (name, host, port, admin_user, admin_password) VALUES (%s, %s, %s, %s, %s)",
         (name, host, port, admin_user, admin_password),
     )
     db.commit()
@@ -465,9 +503,9 @@ def servers_edit(server_id):
     if request.form["admin_password"].strip():
         data["admin_password"] = encrypt(request.form["admin_password"].strip())
 
-    fields = ", ".join(f"{k} = ?" for k in data)
+    fields = ", ".join(f"{k} = %s" for k in data)
     values = list(data.values()) + [server_id]
-    db.execute(f"UPDATE servers SET {fields} WHERE id = ?", values)
+    db.execute(f"UPDATE servers SET {fields} WHERE id = %s", values)
     db.commit()
     return redirect(url_for("servers_list"))
 
@@ -477,7 +515,7 @@ def servers_edit(server_id):
 @csrf_protect
 def servers_delete(server_id):
     db = get_db()
-    db.execute("DELETE FROM servers WHERE id = ?", (server_id,))
+    db.execute("DELETE FROM servers WHERE id = %s", (server_id,))
     db.commit()
     return redirect(url_for("servers_list"))
 
@@ -487,7 +525,7 @@ def servers_delete(server_id):
 @csrf_protect
 def servers_test(server_id):
     db = get_db()
-    server = db.execute("SELECT * FROM servers WHERE id = ?", (server_id,)).fetchone()
+    server = db.execute("SELECT * FROM servers WHERE id = %s", (server_id,)).fetchone()
     if not server:
         return jsonify({"ok": False, "error": "Server not found"}), 404
 
@@ -516,7 +554,7 @@ def servers_refresh(server_id):
 def servers_databases(server_id):
     db = get_db()
     rows = db.execute(
-        "SELECT database_name FROM server_databases WHERE server_id = ? ORDER BY database_name",
+        "SELECT database_name FROM server_databases WHERE server_id = %s ORDER BY database_name",
         (server_id,),
     ).fetchall()
     return jsonify([r["database_name"] for r in rows])
@@ -526,7 +564,7 @@ def servers_databases(server_id):
 @auth_required
 def servers_users(server_id):
     db = get_db()
-    server = db.execute("SELECT * FROM servers WHERE id = ?", (server_id,)).fetchone()
+    server = db.execute("SELECT * FROM servers WHERE id = %s", (server_id,)).fetchone()
     if not server:
         return jsonify({"ok": False, "error": "Server not found"}), 404
     try:
@@ -540,7 +578,7 @@ def servers_users(server_id):
 @auth_required
 def servers_user_grants(server_id, user, host):
     db = get_db()
-    server = db.execute("SELECT * FROM servers WHERE id = ?", (server_id,)).fetchone()
+    server = db.execute("SELECT * FROM servers WHERE id = %s", (server_id,)).fetchone()
     if not server:
         return jsonify({"ok": False, "error": "Server not found"}), 404
     try:
@@ -587,7 +625,7 @@ def grants_create_user():
 
     for sid in server_ids:
         sid = int(sid)
-        server = db.execute("SELECT * FROM servers WHERE id = ?", (sid,)).fetchone()
+        server = db.execute("SELECT * FROM servers WHERE id = %s", (sid,)).fetchone()
         if not server:
             continue
 
@@ -607,7 +645,7 @@ def grants_create_user():
             stmt = f"CREATE USER IF NOT EXISTS '{grantee_user}'@'{grantee_host}' IDENTIFIED BY '***'"
             db.execute(
                 "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 1)",
                 (sid, server["name"], grantee_user, grantee_host, "CREATE USER", "[]", stmt),
             )
             db.commit()
@@ -616,7 +654,7 @@ def grants_create_user():
             stmt = f"CREATE USER IF NOT EXISTS '{grantee_user}'@'{grantee_host}'"
             db.execute(
                 "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, error_message) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s)",
                 (sid, server["name"], grantee_user, grantee_host, "CREATE USER", "[]", stmt, str(e)),
             )
             db.commit()
@@ -648,14 +686,14 @@ def grants_preview():
     preview = []
     for sid in server_ids:
         sid = int(sid)
-        server = db.execute("SELECT * FROM servers WHERE id = ?", (sid,)).fetchone()
+        server = db.execute("SELECT * FROM servers WHERE id = %s", (sid,)).fetchone()
         if not server:
             continue
 
         dbs = per_server_databases.get(str(sid), [])
         if not dbs:
             available = db.execute(
-                "SELECT database_name FROM server_databases WHERE server_id = ?",
+                "SELECT database_name FROM server_databases WHERE server_id = %s",
                 (sid,),
             ).fetchall()
             dbs = [r["database_name"] for r in available]
@@ -699,14 +737,14 @@ def grants_execute():
 
     for sid in server_ids:
         sid = int(sid)
-        server = db.execute("SELECT * FROM servers WHERE id = ?", (sid,)).fetchone()
+        server = db.execute("SELECT * FROM servers WHERE id = %s", (sid,)).fetchone()
         if not server:
             continue
 
         dbs = per_server_databases.get(str(sid), [])
         if not dbs:
             available = db.execute(
-                "SELECT database_name FROM server_databases WHERE server_id = ?",
+                "SELECT database_name FROM server_databases WHERE server_id = %s",
                 (sid,),
             ).fetchall()
             dbs = [r["database_name"] for r in available]
@@ -726,7 +764,7 @@ def grants_execute():
             stmt = f"GRANT {privileges} ON {', '.join('`' + d + '`.*' for d in dbs)} TO '{grantee_user}'@'{grantee_host}'"
             db.execute(
                 "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 1)",
                 (
                     sid,
                     server["name"],
@@ -743,7 +781,7 @@ def grants_execute():
             stmt = f"GRANT {privileges} ON {', '.join('`' + d + '`.*' for d in dbs)} TO '{grantee_user}'@'{grantee_host}'"
             db.execute(
                 "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, error_message) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s)",
                 (
                     sid,
                     server["name"],
@@ -776,7 +814,7 @@ def history_page():
 def history_detail(history_id):
     db = get_db()
     record = db.execute(
-        "SELECT * FROM grant_history WHERE id = ?", (history_id,)
+        "SELECT * FROM grant_history WHERE id = %s", (history_id,)
     ).fetchone()
     if not record:
         return "Not found", 404
@@ -796,24 +834,24 @@ def roles_page():
 @csrf_protect
 def roles_sync(server_id):
     db = get_db()
-    server = db.execute("SELECT * FROM servers WHERE id = ?", (server_id,)).fetchone()
+    server = db.execute("SELECT * FROM servers WHERE id = %s", (server_id,)).fetchone()
     if not server:
         return jsonify({"ok": False, "error": "Server not found"}), 404
 
     try:
         roles = mysql_discover_roles(dict(server))
-        db.execute("DELETE FROM roles WHERE server_id = ?", (server_id,))
+        db.execute("DELETE FROM roles WHERE server_id = %s", (server_id,))
         for role in roles:
             db.execute(
-                "INSERT OR IGNORE INTO roles (server_id, role_name) VALUES (?, ?)",
+                "INSERT IGNORE INTO roles (server_id, role_name) VALUES (%s, %s)",
                 (server_id, role),
             )
 
         grants = mysql_discover_role_grants(dict(server))
-        db.execute("DELETE FROM role_grants WHERE server_id = ?", (server_id,))
+        db.execute("DELETE FROM role_grants WHERE server_id = %s", (server_id,))
         for g in grants:
             db.execute(
-                "INSERT INTO role_grants (server_id, role_name, grantee_user, grantee_host) VALUES (?, ?, ?, ?)",
+                "INSERT INTO role_grants (server_id, role_name, grantee_user, grantee_host) VALUES (%s, %s, %s, %s)",
                 (server_id, g["role_name"], g["grantee_user"], g["grantee_host"]),
             )
 
@@ -828,10 +866,10 @@ def roles_sync(server_id):
 def roles_for_server(server_id):
     db = get_db()
     local_roles = db.execute(
-        "SELECT * FROM roles WHERE server_id = ? ORDER BY role_name", (server_id,)
+        "SELECT * FROM roles WHERE server_id = %s ORDER BY role_name", (server_id,)
     ).fetchall()
     local_grants = db.execute(
-        "SELECT * FROM role_grants WHERE server_id = ? ORDER BY role_name, grantee_user, grantee_host",
+        "SELECT * FROM role_grants WHERE server_id = %s ORDER BY role_name, grantee_user, grantee_host",
         (server_id,),
     ).fetchall()
     return jsonify({
@@ -856,20 +894,20 @@ def roles_create():
 
     for sid in server_ids:
         sid = int(sid)
-        server = db.execute("SELECT * FROM servers WHERE id = ?", (sid,)).fetchone()
+        server = db.execute("SELECT * FROM servers WHERE id = %s", (sid,)).fetchone()
         if not server:
             continue
 
         try:
             mysql_create_role(dict(server), role_name)
             db.execute(
-                "INSERT OR IGNORE INTO roles (server_id, role_name) VALUES (?, ?)",
+                "INSERT IGNORE INTO roles (server_id, role_name) VALUES (%s, %s)",
                 (sid, role_name),
             )
             stmt = f"CREATE ROLE IF NOT EXISTS '{role_name}'"
             db.execute(
                 "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, grant_type) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'role')",
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'role')",
                 (sid, server["name"], role_name, "%", "CREATE ROLE", "[]", stmt),
             )
             db.commit()
@@ -878,7 +916,7 @@ def roles_create():
             stmt = f"CREATE ROLE IF NOT EXISTS '{role_name}'"
             db.execute(
                 "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, error_message, grant_type) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'role')",
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, 'role')",
                 (sid, server["name"], role_name, "%", "CREATE ROLE", "[]", stmt, str(e)),
             )
             db.commit()
@@ -905,20 +943,20 @@ def roles_grant():
 
     for sid in server_ids:
         sid = int(sid)
-        server = db.execute("SELECT * FROM servers WHERE id = ?", (sid,)).fetchone()
+        server = db.execute("SELECT * FROM servers WHERE id = %s", (sid,)).fetchone()
         if not server:
             continue
 
         try:
             mysql_grant_role(dict(server), role_name, grantee_user, grantee_host)
             db.execute(
-                "INSERT OR REPLACE INTO role_grants (server_id, role_name, grantee_user, grantee_host) VALUES (?, ?, ?, ?)",
+                "REPLACE INTO role_grants (server_id, role_name, grantee_user, grantee_host) VALUES (%s, %s, %s, %s)",
                 (sid, role_name, grantee_user, grantee_host),
             )
             stmt = f"GRANT '{role_name}' TO '{grantee_user}'@'{grantee_host}'"
             db.execute(
                 "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, grant_type) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'role')",
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'role')",
                 (sid, server["name"], grantee_user, grantee_host, role_name, "[]", stmt),
             )
             db.commit()
@@ -927,7 +965,7 @@ def roles_grant():
             stmt = f"GRANT '{role_name}' TO '{grantee_user}'@'{grantee_host}'"
             db.execute(
                 "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, error_message, grant_type) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'role')",
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, 'role')",
                 (sid, server["name"], grantee_user, grantee_host, role_name, "[]", stmt, str(e)),
             )
             db.commit()
@@ -954,20 +992,20 @@ def roles_revoke():
 
     for sid in server_ids:
         sid = int(sid)
-        server = db.execute("SELECT * FROM servers WHERE id = ?", (sid,)).fetchone()
+        server = db.execute("SELECT * FROM servers WHERE id = %s", (sid,)).fetchone()
         if not server:
             continue
 
         try:
             mysql_revoke_role(dict(server), role_name, grantee_user, grantee_host)
             db.execute(
-                "DELETE FROM role_grants WHERE server_id = ? AND role_name = ? AND grantee_user = ? AND grantee_host = ?",
+                "DELETE FROM role_grants WHERE server_id = %s AND role_name = %s AND grantee_user = %s AND grantee_host = %s",
                 (sid, role_name, grantee_user, grantee_host),
             )
             stmt = f"REVOKE '{role_name}' FROM '{grantee_user}'@'{grantee_host}'"
             db.execute(
                 "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, grant_type) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'role')",
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'role')",
                 (sid, server["name"], grantee_user, grantee_host, role_name, "[]", stmt),
             )
             db.commit()
@@ -976,7 +1014,7 @@ def roles_revoke():
             stmt = f"REVOKE '{role_name}' FROM '{grantee_user}'@'{grantee_host}'"
             db.execute(
                 "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, error_message, grant_type) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'role')",
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, 'role')",
                 (sid, server["name"], grantee_user, grantee_host, role_name, "[]", stmt, str(e)),
             )
             db.commit()
@@ -996,18 +1034,18 @@ def roles_drop(server_id):
         return jsonify({"ok": False, "error": "Role name is required."})
 
     db = get_db()
-    server = db.execute("SELECT * FROM servers WHERE id = ?", (server_id,)).fetchone()
+    server = db.execute("SELECT * FROM servers WHERE id = %s", (server_id,)).fetchone()
     if not server:
         return jsonify({"ok": False, "error": "Server not found"}), 404
 
     try:
         mysql_drop_role(dict(server), role_name)
-        db.execute("DELETE FROM roles WHERE server_id = ? AND role_name = ?", (server_id, role_name))
-        db.execute("DELETE FROM role_grants WHERE server_id = ? AND role_name = ?", (server_id, role_name))
+        db.execute("DELETE FROM roles WHERE server_id = %s AND role_name = %s", (server_id, role_name))
+        db.execute("DELETE FROM role_grants WHERE server_id = %s AND role_name = %s", (server_id, role_name))
         stmt = f"DROP ROLE '{role_name}'"
         db.execute(
             "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, grant_type) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'role')",
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'role')",
             (server_id, server["name"], role_name, "%", "DROP ROLE", "[]", stmt),
         )
         db.commit()
@@ -1016,7 +1054,7 @@ def roles_drop(server_id):
         stmt = f"DROP ROLE '{role_name}'"
         db.execute(
             "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, error_message, grant_type) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'role')",
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, 'role')",
             (server_id, server["name"], role_name, "%", "DROP ROLE", "[]", stmt, str(e)),
         )
         db.commit()
@@ -1041,7 +1079,7 @@ def roles_set_default():
 
     for sid in server_ids:
         sid = int(sid)
-        server = db.execute("SELECT * FROM servers WHERE id = ?", (sid,)).fetchone()
+        server = db.execute("SELECT * FROM servers WHERE id = %s", (sid,)).fetchone()
         if not server:
             continue
 
@@ -1050,7 +1088,7 @@ def roles_set_default():
             stmt = f"SET DEFAULT ROLE '{default_role}' TO '{grantee_user}'@'{grantee_host}'"
             db.execute(
                 "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, grant_type) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'role')",
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'role')",
                 (sid, server["name"], grantee_user, grantee_host, default_role, "[]", stmt),
             )
             db.commit()
@@ -1059,7 +1097,7 @@ def roles_set_default():
             stmt = f"SET DEFAULT ROLE '{default_role}' TO '{grantee_user}'@'{grantee_host}'"
             db.execute(
                 "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, databases, grant_statement, success, error_message, grant_type) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'role')",
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, 'role')",
                 (sid, server["name"], grantee_user, grantee_host, default_role, "[]", stmt, str(e)),
             )
             db.commit()

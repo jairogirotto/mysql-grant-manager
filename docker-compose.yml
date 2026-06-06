@@ -1,0 +1,42 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MGM_DB_ROOT_PASS:-root}
+      MYSQL_DATABASE: ${MGM_DB_NAME:-mysql_grant_manager}
+      MYSQL_USER: ${MGM_DB_USER:-mgm}
+      MYSQL_PASSWORD: ${MGM_DB_PASS:-mgm}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    ports:
+      - "5050:5050"
+    environment:
+      MGM_DB_HOST: mysql
+      MGM_DB_PORT: 3306
+      MGM_DB_USER: ${MGM_DB_USER:-mgm}
+      MGM_DB_PASS: ${MGM_DB_PASS:-mgm}
+      MGM_DB_NAME: ${MGM_DB_NAME:-mysql_grant_manager}
+      MGM_DATA_DIR: /data
+      MGM_USER: ${MGM_USER:-admin}
+      MGM_PASS: ${MGM_PASS:-admin}
+    volumes:
+      - app_data:/data
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+  app_data:
