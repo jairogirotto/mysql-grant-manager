@@ -1,0 +1,34 @@
+ALTERACAO: Campo descricao na tabela servidores
+===============================================
+
+Data: 2026-06-07
+
+Objetivo: Adicionar um atributo "descricao" na tabela de servidores para
+detalhar o objetivo de cada servidor cadastrado.
+
+Arquivos modificados:
+  1. mgm.py                  - schema, INSERT, UPDATE, migracao ALTER TABLE
+  2. templates/servers.html  - formularios (add/edit) e tabela
+
+Detalhes:
+
+  Schema (mgm.py:237):
+    descricao TEXT DEFAULT ''  -- adicionado apos admin_password
+
+  Migracao (mgm.py:289):
+    ALTER TABLE servers ADD COLUMN IF NOT EXISTS descricao TEXT DEFAULT ''
+    Garante que bancos existentes ganhem a coluna automaticamente.
+
+  INSERT em servers_add (mgm.py:509-510):
+    Inclui descricao vinda de request.form.get("descricao", "").strip()
+
+  UPDATE em servers_edit (mgm.py:526):
+    Inclui "descricao" no dict de campos editaveis.
+
+  Frontend (servers.html):
+    - Campo "Descricao" no formulario Add Server (placeholder com exemplo)
+    - Campo "Descricao" no modal Edit Server (com id edit-descricao)
+    - Coluna "Descricao" na tabela de servidores (mostra valor ou '-')
+    - JS editServer() inclui descricao no objeto passado ao modal
+
+  Campo opcional: se nao preenchido, fica vazio ('').

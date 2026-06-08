@@ -3,6 +3,9 @@
 <h1>Histórico de Grants</h1>
 
 {% if history %}
+<p style="color:#6b7280;font-size:0.82rem;margin-bottom:8px">
+    Exibindo {{ (page - 1) * per_page + 1 }}–{{ [(page - 1) * per_page + history|length, total]|min }} de {{ total }} registros.
+</p>
 <table>
     <thead>
         <tr>
@@ -44,6 +47,23 @@
     {% endfor %}
     </tbody>
 </table>
+
+{% if total_pages > 1 %}
+<div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:16px">
+    {% if page > 1 %}
+    <a class="btn btn-sm" href="{{ url_for('history_page', page=page-1) }}">Anterior</a>
+    {% else %}
+    <span class="btn btn-sm" style="opacity:0.4;cursor:default">Anterior</span>
+    {% endif %}
+    <span style="font-size:0.85rem;color:#374151">Página {{ page }} de {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a class="btn btn-sm" href="{{ url_for('history_page', page=page+1) }}">Próxima</a>
+    {% else %}
+    <span class="btn btn-sm" style="opacity:0.4;cursor:default">Próxima</span>
+    {% endif %}
+</div>
+{% endif %}
+
 {% else %}
 <p>Nenhum registro.</p>
 {% endif %}

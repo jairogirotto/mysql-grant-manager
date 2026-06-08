@@ -8,3 +8,4 @@ app.db
 session-*
 *.log
 /data/
+backups/

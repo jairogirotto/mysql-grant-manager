@@ -12,6 +12,7 @@
         <label>Host: <input name="host" required placeholder="10.0.0.1"></label>
         <label>Porta: <input name="port" type="number" value="3306"></label>
         <label>Usuário admin: <input name="admin_user" required placeholder="root"></label>
+        <label>Descrição: <input name="descricao" placeholder="Ex: Servidor de produção principal"></label>
         <label>Senha: <input name="admin_password" type="password" required></label>
         <button class="btn btn-primary">Salvar</button>
         <button type="button" class="btn" onclick="this.closest('#add-form').style.display='none'">Cancelar</button>
@@ -23,6 +24,7 @@
     <thead>
         <tr>
             <th>Nome</th>
+            <th>Descrição</th>
             <th>Host</th>
             <th>Porta</th>
             <th>Usuário</th>
@@ -35,13 +37,14 @@
     {% for s in servers %}
         <tr>
             <td>{{ s.name }}</td>
+            <td>{{ s.descricao or '-' }}</td>
             <td><code>{{ s.host }}:{{ s.port }}</code></td>
             <td>{{ s.port }}</td>
             <td><code>{{ s.admin_user }}</code></td>
             <td id="db-count-{{ s.id }}">?</td>
             <td id="conn-status-{{ s.id }}">-</td>
             <td class="actions">
-                <button class="btn btn-sm" onclick="editServer({{ {'id': s.id, 'name': s.name, 'host': s.host, 'port': s.port, 'admin_user': s.admin_user} | tojson }})">Editar</button>
+                <button class="btn btn-sm" onclick="editServer({{ {'id': s.id, 'name': s.name, 'host': s.host, 'port': s.port, 'admin_user': s.admin_user, 'descricao': s.descricao or ''} | tojson }})">Editar</button>
                 <button class="btn btn-sm btn-test" onclick="testConnection({{ s.id }})">Testar</button>
                 <button class="btn btn-sm btn-refresh" onclick="refreshDatabases({{ s.id }})">Refresh DBs</button>
                 <form method="POST" action="{{ url_for('servers_delete', server_id=s.id) }}" style="display:inline" onsubmit="return confirm('Remover servidor {{ s.name }}?')">
@@ -65,6 +68,7 @@
         <label>Nome: <input name="name" id="edit-name" required></label>
         <label>Host: <input name="host" id="edit-host" required></label>
         <label>Porta: <input name="port" id="edit-port" type="number" value="3306"></label>
+        <label>Descrição: <input name="descricao" id="edit-descricao" placeholder="Ex: Servidor de produção principal"></label>
         <label>Usuário admin: <input name="admin_user" id="edit-user" required></label>
         <label>Senha (deixe em branco para manter): <input name="admin_password" type="password"></label>
         <button class="btn btn-primary">Salvar</button>
@@ -80,6 +84,7 @@ function editServer(s) {
     document.getElementById('edit-name').value = s.name;
     document.getElementById('edit-host').value = s.host;
     document.getElementById('edit-port').value = s.port;
+    document.getElementById('edit-descricao').value = s.descricao || '';
     document.getElementById('edit-user').value = s.admin_user;
     document.getElementById('edit-form-inner').action = '/servers/' + s.id + '/edit';
     document.getElementById('edit-form').style.display = 'block';

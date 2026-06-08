@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MySQL Grant Manager — Grants (Mock)</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+        :root { --sidebar-width: 240px; --brand: #6366f1; }
+        body { min-height: 100vh; margin: 0; }
+        .layout { display: flex; min-height: 100vh; }
+        .sidebar { width: var(--sidebar-width); background: var(--pico-card-background-color); border-right: 1px solid var(--pico-muted-border-color); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 100; padding: 1.25rem; }
+        .sidebar .brand { font-size: 1.05rem; font-weight: 700; color: var(--brand); display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem; text-decoration: none; }
+        .sidebar nav { display: flex; flex-direction: column; gap: 2px; }
+        .sidebar nav a { padding: 0.5rem 0.75rem; border-radius: 6px; color: var(--pico-color); text-decoration: none; font-size: 0.875rem; display: flex; align-items: center; gap: 0.6rem; transition: background 0.15s, color 0.15s; }
+        .sidebar nav a:hover { background: var(--pico-primary-hover-background); color: var(--pico-primary-inverse); }
+        .sidebar nav a.active { background: var(--brand); color: #fff; }
+        .sidebar .version { margin-top: auto; font-size: 0.7rem; color: var(--pico-muted-color); }
+        .sidebar .badge-count { margin-left: auto; background: var(--pico-primary); color: var(--pico-primary-inverse); padding: 1px 7px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; }
+        .main { margin-left: var(--sidebar-width); flex: 1; padding: 1.5rem 2rem; background: var(--pico-background-color); }
+        .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.75rem; }
+        .page-header h1 { margin: 0; font-size: 1.4rem; }
+        .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--pico-muted-border-color); margin-bottom: 1.5rem; }
+        .tabs button { padding: 0.5rem 1rem; border: none; background: none; cursor: pointer; font-size: 0.85rem; color: var(--pico-muted-color); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.15s, border-color 0.15s; }
+        .tabs button.active { color: var(--brand); border-bottom-color: var(--brand); font-weight: 600; }
+        .panel { background: var(--pico-card-background-color); border: 1px solid var(--pico-card-border-color); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem; }
+        .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .panel-header h2 { margin: 0; font-size: 1.05rem; }
+        .table-wrapper { overflow-x: auto; }
+        table { margin-bottom: 0; }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar">
+        <a href="dashboard.html" class="brand">🗄️ MySQL Grant Manager</a>
+        <nav>
+            <a href="dashboard.html">📊 Dashboard</a>
+            <a href="servers.html">🖥️ Servidores <span class="badge-count">4</span></a>
+            <a href="grants.html" class="active">🔑 Grants</a>
+            <a href="roles.html">👥 Roles <span class="badge-count">8</span></a>
+            <a href="history.html">📜 Histórico</a>
+        </nav>
+        <span class="version">v2.0.0 • mock</span>
+    </aside>
+
+    <main class="main">
+        <div class="page-header"><h1>Grants</h1></div>
+
+        <div class="tabs">
+            <button class="active" onclick="switchTab('usuarios', this)">Listar Usuários</button>
+            <button onclick="switchTab('criar', this)">Criar Usuário</button>
+            <button onclick="switchTab('conceder', this)">Conceder Privilégios</button>
+        </div>
+
+        <div id="tab-usuarios" class="panel">
+            <div class="panel-header">
+                <h2>Usuários do servidor</h2>
+                <select style="width:auto"><option>prod-mysql-01</option><option>prod-mysql-02</option><option>staging-db</option><option>replica-01</option></select>
+            </div>
+            <div class="table-wrapper">
+                <table class="striped">
+                    <thead><tr><th>Usuário</th><th>Host</th><th>Grants</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>app_readonly</code></td><td><code>%</code></td><td><small>GRANT SELECT ON *.* TO 'app_readonly'@'%'</small></td></tr>
+                        <tr><td><code>dev_team</code></td><td><code>10.%</code></td><td><small>GRANT SELECT, INSERT, UPDATE, DELETE ON app_db.* TO 'dev_team'@'10.%'</small></td></tr>
+                        <tr><td><code>bi_analyst</code></td><td><code>%</code></td><td><small>GRANT SELECT ON analytics.* TO 'bi_analyst'@'%'</small></td></tr>
+                        <tr><td><code>api_service</code></td><td><code>localhost</code></td><td><small>GRANT SELECT, INSERT, UPDATE, DELETE, EXECUTE ON api_db.* TO 'api_service'@'localhost'</small></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="tab-criar" class="panel" style="display:none">
+            <div class="panel-header"><h2>Criar Usuário</h2></div>
+            <div class="grid">
+                <label>Nome <input type="text" placeholder="novo_usuario"></label>
+                <label>Senha <input type="password"></label>
+            </div>
+            <div class="grid">
+                <label>Host <input type="text" value="%"></label>
+                <fieldset><legend>Servidores</legend>
+                    <label><input type="checkbox" checked> prod-mysql-01</label>
+                    <label><input type="checkbox" checked> prod-mysql-02</label>
+                    <label><input type="checkbox"> staging-db</label>
+                </fieldset>
+            </div>
+            <button class="primary" style="margin-top:1rem">Criar usuário nos servidores selecionados</button>
+        </div>
+
+        <div id="tab-conceder" class="panel" style="display:none">
+            <div class="panel-header"><h2>Conceder Privilégios</h2></div>
+            <div class="grid">
+                <label>Usuário <input type="text" placeholder="app_readonly"></label>
+                <label>Banco <input type="text" placeholder="my_db"></label>
+            </div>
+            <fieldset style="margin-top:0.5rem"><legend>Servidores</legend>
+                <label><input type="checkbox" checked> prod-mysql-01</label>
+                <label><input type="checkbox"> staging-db</label>
+            </fieldset>
+            <fieldset style="margin-top:0.5rem"><legend>Privilégios</legend>
+                <div class="grid">
+                    <div>
+                        <label><input type="checkbox"> SELECT</label>
+                        <label><input type="checkbox"> INSERT</label>
+                        <label><input type="checkbox"> UPDATE</label>
+                        <label><input type="checkbox"> DELETE</label>
+                    </div>
+                    <div>
+                        <label><input type="checkbox"> CREATE</label>
+                        <label><input type="checkbox"> DROP</label>
+                        <label><input type="checkbox"> ALTER</label>
+                        <label><input type="checkbox"> ALL PRIVILEGES</label>
+                    </div>
+                </div>
+            </fieldset>
+            <button class="primary" style="margin-top:1rem">▶ Visualizar SQL</button>
+        </div>
+    </main>
+</div>
+<script>
+function switchTab(name, btn) {
+    document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-usuarios').style.display = name === 'usuarios' ? '' : 'none';
+    document.getElementById('tab-criar').style.display = name === 'criar' ? '' : 'none';
+    document.getElementById('tab-conceder').style.display = name === 'conceder' ? '' : 'none';
+}
+</script>
+</body>
+</html>

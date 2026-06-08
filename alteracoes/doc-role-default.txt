@@ -1,0 +1,27 @@
+ALTERACAO: Role padrao automatica ao conceder role
+=================================================
+
+Data: 2026-06-07
+
+Objetivo: Ao conceder uma role a um usuario MySQL, definir automaticamente
+essa role como padrao (SET DEFAULT ROLE), eliminando a necessidade de
+usar a aba "Role Default" separadamente.
+
+Arquivos modificados:
+  1. mgm.py          - rota /roles/grant
+  2. templates/roles.html - formulario e JS
+
+Detalhes:
+  - Checkbox "Definir como role padrao" adicionado na aba "Conceder Role"
+    (marcado por padrao).
+  - Se marcado, apos GRANT '<role>' TO '<user>'@'<host>', o backend
+    executa automaticamente SET DEFAULT ROLE '<role>' TO '<user>'@'<host>'.
+  - Se desmarcado, comportamento original e mantido (apenas concede).
+
+Fluxo no backend (mgm.py:974-977):
+  mysql_grant_role(server, role, user, host)
+  if set_default:
+      mysql_set_default_role(server, user, host, role)
+
+Compatibilidade: Nao quebra nenhuma funcionalidade existente. O checkbox
+vem marcado por padrao, entao o novo comportamento e o default.

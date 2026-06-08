@@ -178,19 +178,32 @@ async function loadServerUsers() {
             content.innerHTML = '<p style="color:#6b7280">Nenhum usuário encontrado.</p>';
             return;
         }
-        let html = '<table><thead><tr><th>Usuário</th><th>Tipo</th></tr></thead><tbody>';
+        let html = '<table><thead><tr><th>Usuário</th><th>Tipo</th><th style="width:80px;text-align:center">Ações</th></tr></thead><tbody>';
         d.users.forEach(u => {
             const parts = u.user_host.split('@');
             const user = parts[0];
             const host = parts.slice(1).join('@');
             html += '<tr><td><code class="user-grant-hover" data-server="' + sid + '" data-user="' + user + '" data-host="' + host + '" onmouseenter="showGrantTooltip(event, this)" onmouseleave="hideGrantTooltip()">' + u.user_host + '</code></td>';
-            html += '<td>' + (u.is_role ? '<span class="badge" style="background:#ede9fe;color:#6b21a8">ROLE</span>' : '<span class="badge" style="background:#dbeafe;color:#1e40af">USUÁRIO</span>') + '</td></tr>';
+            html += '<td>' + (u.is_role ? '<span class="badge" style="background:#ede9fe;color:#6b21a8">ROLE</span>' : '<span class="badge" style="background:#dbeafe;color:#1e40af">USUÁRIO</span>') + '</td>';
+            html += '<td style="text-align:center"><button class="btn btn-danger btn-sm" onclick="deleteUser(' + sid + ',\'' + user + '\',\'' + host + '\')">Excluir</button></td></tr>';
         });
         html += '</tbody></table>';
         content.innerHTML = html;
     } catch(e) {
         content.innerHTML = '<p class="toast-err" style="padding:8px;border-radius:4px">Erro ao conectar.</p>';
     }
+}
+
+async function deleteUser(serverId, user, host) {
+    if (!confirm('Excluir usuário ' + user + '@' + host + '? Esta ação executa DROP USER no MySQL e removerá todos os grants.')) return;
+    const r = await fetch('/servers/' + serverId + '/users/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
+        body: JSON.stringify({grantee_user: user, grantee_host: host})
+    });
+    const d = await r.json();
+    showToast(d.ok ? 'Usuário excluído.' : 'Erro: ' + d.error, d.ok);
+    if (d.ok) loadServerUsers();
 }
 
 let _tooltipEl = null;

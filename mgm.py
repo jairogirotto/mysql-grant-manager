@@ -234,6 +234,7 @@ def init_db():
                     port INTEGER DEFAULT 3306,
                     admin_user TEXT NOT NULL,
                     admin_password TEXT NOT NULL,
+                    descricao VARCHAR(500) DEFAULT '',
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -250,7 +251,7 @@ def init_db():
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS grant_history (
                     id INTEGER PRIMARY KEY AUTO_INCREMENT,
-                    server_id INTEGER NOT NULL,
+                    server_id INTEGER,
                     server_name TEXT NOT NULL,
                     grantee_user TEXT NOT NULL,
                     grantee_host TEXT NOT NULL,
@@ -285,6 +286,12 @@ def init_db():
                     FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
                 )
             """)
+            cur.execute("""
+                SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'servers' AND COLUMN_NAME = 'descricao'
+            """)
+            if cur.fetchone()["cnt"] == 0:
+                cur.execute("ALTER TABLE servers ADD COLUMN descricao VARCHAR(500) DEFAULT ''")
         db.commit()
     finally:
         db.close()
@@ -506,8 +513,8 @@ def servers_add():
 
     db = get_db()
     db.execute(
-        "INSERT INTO servers (name, host, port, admin_user, admin_password) VALUES (%s, %s, %s, %s, %s)",
-        (name, host, port, admin_user, admin_password),
+        "INSERT INTO servers (name, host, port, admin_user, admin_password, descricao) VALUES (%s, %s, %s, %s, %s, %s)",
+        (name, host, port, admin_user, admin_password, request.form.get("descricao", "").strip()),
     )
     db.commit()
     return redirect(url_for("servers_list"))
@@ -523,6 +530,7 @@ def servers_edit(server_id):
         "host": request.form["host"].strip(),
         "port": int(request.form.get("port", 3306)),
         "admin_user": request.form["admin_user"].strip(),
+        "descricao": request.form.get("descricao", "").strip(),
     }
     if request.form["admin_password"].strip():
         data["admin_password"] = encrypt(request.form["admin_password"].strip())
@@ -617,6 +625,55 @@ def servers_user_grants(server_id, user, host):
         finally:
             conn.close()
     except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/servers/<int:server_id>/users/delete", methods=["POST"])
+@auth_required
+@csrf_protect
+def servers_users_delete(server_id):
+    data = request.get_json()
+    grantee_user = data.get("grantee_user", "").strip()
+    grantee_host = data.get("grantee_host", "%").strip() or "%"
+
+    if not grantee_user:
+        return jsonify({"ok": False, "error": "User is required."})
+
+    db = get_db()
+    server = db.execute("SELECT * FROM servers WHERE id = %s", (server_id,)).fetchone()
+    if not server:
+        return jsonify({"ok": False, "error": "Server not found"}), 404
+
+    try:
+        u = _validate_mysql_user_or_host(grantee_user)
+        h = _validate_mysql_user_or_host(grantee_host)
+        conn = mysql_connect(dict(server))
+        try:
+            with conn.cursor() as cur:
+                cur.execute(f"DROP USER '{u}'@'{h}'")
+            conn.commit()
+        finally:
+            conn.close()
+
+        stmt = f"DROP USER '{grantee_user}'@'{grantee_host}'"
+        db.execute(
+            "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, grant_type) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'user')",
+            (server_id, server["name"], grantee_user, grantee_host, "DROP USER", "[]", stmt),
+        )
+        db.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        stmt = f"DROP USER '{grantee_user}'@'{grantee_host}'"
+        try:
+            db.execute(
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, error_message, grant_type) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, 'user')",
+                (server_id, server["name"], grantee_user, grantee_host, "DROP USER", "[]", stmt, str(e)),
+            )
+            db.commit()
+        except Exception:
+            pass
         return jsonify({"ok": False, "error": str(e)})
 
 
@@ -827,10 +884,27 @@ def grants_execute():
 @auth_required
 def history_page():
     db = get_db()
+    page = request.args.get("page", 1, type=int)
+    per_page = 25
+    if page < 1:
+        page = 1
+    total = db.execute("SELECT COUNT(*) AS cnt FROM grant_history").fetchone()["cnt"]
+    total_pages = max((total + per_page - 1) // per_page, 1)
+    if page > total_pages:
+        page = total_pages
+    offset = (page - 1) * per_page
     history = db.execute(
-        "SELECT * FROM grant_history ORDER BY executed_at DESC LIMIT 200"
+        "SELECT * FROM grant_history ORDER BY executed_at DESC LIMIT %s OFFSET %s",
+        (per_page, offset),
     ).fetchall()
-    return render_template("history.html", history=history)
+    return render_template(
+        "history.html",
+        history=history,
+        page=page,
+        total_pages=total_pages,
+        total=total,
+        per_page=per_page,
+    )
 
 
 @app.route("/history/<int:history_id>")
@@ -973,6 +1047,8 @@ def roles_grant():
 
         try:
             mysql_grant_role(dict(server), role_name, grantee_user, grantee_host)
+            if data.get("set_default"):
+                mysql_set_default_role(dict(server), grantee_user, grantee_host, role_name)
             db.execute(
                 "REPLACE INTO role_grants (server_id, role_name, grantee_user, grantee_host) VALUES (%s, %s, %s, %s)",
                 (sid, role_name, grantee_user, grantee_host),

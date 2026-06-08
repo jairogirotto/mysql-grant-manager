@@ -39,6 +39,10 @@
     <label>Role: <input id="grant-role-name" placeholder="app_readonly"></label>
     <label>Usuário MySQL: <input id="grant-grantee-user" placeholder="app_user"></label>
     <label>Host de origem: <input id="grant-grantee-host" value="%" placeholder="%"></label>
+    <label>
+        <input type="checkbox" id="grant-set-default" checked>
+        Definir como role padrão para o usuário
+    </label>
 
     <h4>Servidores</h4>
     <div class="server-checkboxes">
@@ -195,7 +199,7 @@ async function grantRole() {
     const r = await fetch('/roles/grant', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
-        body: JSON.stringify({role_name: role, grantee_user: user, grantee_host: host, server_ids: serverIds})
+        body: JSON.stringify({role_name: role, grantee_user: user, grantee_host: host, server_ids: serverIds, set_default: document.getElementById('grant-set-default').checked})
     });
     const d = await r.json();
     showResult('grant-result', d);

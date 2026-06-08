@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MySQL Grant Manager — Servidores (Mock)</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+        :root { --sidebar-width: 240px; --brand: #6366f1; }
+        body { min-height: 100vh; margin: 0; }
+        .layout { display: flex; min-height: 100vh; }
+        .sidebar { width: var(--sidebar-width); background: var(--pico-card-background-color); border-right: 1px solid var(--pico-muted-border-color); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 100; padding: 1.25rem; }
+        .sidebar .brand { font-size: 1.05rem; font-weight: 700; color: var(--brand); display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem; text-decoration: none; }
+        .sidebar nav { display: flex; flex-direction: column; gap: 2px; }
+        .sidebar nav a { padding: 0.5rem 0.75rem; border-radius: 6px; color: var(--pico-color); text-decoration: none; font-size: 0.875rem; display: flex; align-items: center; gap: 0.6rem; transition: background 0.15s, color 0.15s; }
+        .sidebar nav a:hover { background: var(--pico-primary-hover-background); color: var(--pico-primary-inverse); }
+        .sidebar nav a.active { background: var(--brand); color: #fff; }
+        .sidebar .version { margin-top: auto; font-size: 0.7rem; color: var(--pico-muted-color); }
+        .sidebar .badge-count { margin-left: auto; background: var(--pico-primary); color: var(--pico-primary-inverse); padding: 1px 7px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; }
+        .main { margin-left: var(--sidebar-width); flex: 1; padding: 1.5rem 2rem; background: var(--pico-background-color); }
+        .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.75rem; }
+        .page-header h1 { margin: 0; font-size: 1.4rem; }
+        .panel { background: var(--pico-card-background-color); border: 1px solid var(--pico-card-border-color); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem; }
+        .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .panel-header h2 { margin: 0; font-size: 1.05rem; }
+        .table-wrapper { overflow-x: auto; }
+        table { margin-bottom: 0; }
+        .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
+        .status-dot.online  { background: #22c55e; }
+        .status-dot.offline { background: #ef4444; }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar">
+        <a href="dashboard.html" class="brand">🗄️ MySQL Grant Manager</a>
+        <nav>
+            <a href="dashboard.html">📊 Dashboard</a>
+            <a href="servers.html" class="active">🖥️ Servidores <span class="badge-count">4</span></a>
+            <a href="grants.html">🔑 Grants</a>
+            <a href="roles.html">👥 Roles <span class="badge-count">8</span></a>
+            <a href="history.html">📜 Histórico</a>
+        </nav>
+        <span class="version">v2.0.0 • mock</span>
+    </aside>
+    <main class="main">
+        <div class="page-header">
+            <h1>Servidores</h1>
+            <button class="primary small" onclick="document.querySelector('details').open=true">+ Novo Servidor</button>
+        </div>
+        <details class="panel">
+            <summary role="button" class="secondary outline small">➕ Adicionar Servidor</summary>
+            <form style="margin-top:1rem">
+                <div class="grid">
+                    <label>Nome <input type="text" placeholder="ex: prod-mysql-01"></label>
+                    <label>Host <input type="text" placeholder="ex: 10.0.1.50"></label>
+                </div>
+                <div class="grid">
+                    <label>Porta <input type="number" value="3306"></label>
+                    <label>Admin User <input type="text" placeholder="ex: root"></label>
+                </div>
+                <label>Admin Senha <input type="password"></label>
+                <button type="submit" class="primary">Salvar</button>
+            </form>
+        </details>
+        <div class="panel">
+            <div class="panel-header"><h2>Servidores cadastrados</h2><small>4 servidores</small></div>
+            <div class="table-wrapper">
+                <table class="striped">
+                    <thead><tr><th>Nome</th><th>Host</th><th>Porta</th><th>Status</th><th>Bancos</th><th></th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>prod-mysql-01</strong></td><td><code>10.0.1.50</code></td><td>3306</td>
+                            <td><span class="status-dot online"></span> Online</td><td><small>12 bancos</small></td>
+                            <td class="actions" style="white-space:nowrap;display:flex;gap:6px;">
+                                <button class="small secondary">Testar</button>
+                                <button class="small contrast">Editar</button>
+                                <button class="small outline" title="Refresh DBs">🔄</button>
+                                <button class="small secondary" style="color:#dc2626">Remover</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>prod-mysql-02</strong></td><td><code>10.0.1.51</code></td><td>3306</td>
+                            <td><span class="status-dot online"></span> Online</td><td><small>8 bancos</small></td>
+                            <td class="actions" style="white-space:nowrap;display:flex;gap:6px;">
+                                <button class="small secondary">Testar</button>
+                                <button class="small contrast">Editar</button>
+                                <button class="small outline" title="Refresh DBs">🔄</button>
+                                <button class="small secondary" style="color:#dc2626">Remover</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>staging-db</strong></td><td><code>192.168.0.30</code></td><td>3307</td>
+                            <td><span class="status-dot online"></span> Online</td><td><small>6 bancos</small></td>
+                            <td class="actions" style="white-space:nowrap;display:flex;gap:6px;">
+                                <button class="small secondary">Testar</button>
+                                <button class="small contrast">Editar</button>
+                                <button class="small outline" title="Refresh DBs">🔄</button>
+                                <button class="small secondary" style="color:#dc2626">Remover</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>replica-01</strong></td><td><code>10.0.2.10</code></td><td>3306</td>
+                            <td><span class="status-dot offline"></span> Offline</td><td><small>—</small></td>
+                            <td class="actions" style="white-space:nowrap;display:flex;gap:6px;">
+                                <button class="small secondary">Testar</button>
+                                <button class="small contrast">Editar</button>
+                                <button class="small outline" title="Refresh DBs">🔄</button>
+                                <button class="small secondary" style="color:#dc2626">Remover</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+</body>
+</html>

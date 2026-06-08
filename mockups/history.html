@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MySQL Grant Manager — Histórico (Mock)</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+        :root { --sidebar-width: 240px; --brand: #6366f1; }
+        body { min-height: 100vh; margin: 0; }
+        .layout { display: flex; min-height: 100vh; }
+        .sidebar { width: var(--sidebar-width); background: var(--pico-card-background-color); border-right: 1px solid var(--pico-muted-border-color); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 100; padding: 1.25rem; }
+        .sidebar .brand { font-size: 1.05rem; font-weight: 700; color: var(--brand); display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem; text-decoration: none; }
+        .sidebar nav { display: flex; flex-direction: column; gap: 2px; }
+        .sidebar nav a { padding: 0.5rem 0.75rem; border-radius: 6px; color: var(--pico-color); text-decoration: none; font-size: 0.875rem; display: flex; align-items: center; gap: 0.6rem; transition: background 0.15s, color 0.15s; }
+        .sidebar nav a:hover { background: var(--pico-primary-hover-background); color: var(--pico-primary-inverse); }
+        .sidebar nav a.active { background: var(--brand); color: #fff; }
+        .sidebar .version { margin-top: auto; font-size: 0.7rem; color: var(--pico-muted-color); }
+        .sidebar .badge-count { margin-left: auto; background: var(--pico-primary); color: var(--pico-primary-inverse); padding: 1px 7px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; }
+        .main { margin-left: var(--sidebar-width); flex: 1; padding: 1.5rem 2rem; background: var(--pico-background-color); }
+        .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.75rem; }
+        .page-header h1 { margin: 0; font-size: 1.4rem; }
+        .panel { background: var(--pico-card-background-color); border: 1px solid var(--pico-card-border-color); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem; }
+        .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .panel-header h2 { margin: 0; font-size: 1.05rem; }
+        .table-wrapper { overflow-x: auto; }
+        table { margin-bottom: 0; }
+        .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
+        .status-dot.ok  { background: #22c55e; }
+        .status-dot.err { background: #ef4444; }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar">
+        <a href="dashboard.html" class="brand">🗄️ MySQL Grant Manager</a>
+        <nav>
+            <a href="dashboard.html">📊 Dashboard</a>
+            <a href="servers.html">🖥️ Servidores <span class="badge-count">4</span></a>
+            <a href="grants.html">🔑 Grants</a>
+            <a href="roles.html">👥 Roles <span class="badge-count">8</span></a>
+            <a href="history.html" class="active">📜 Histórico</a>
+        </nav>
+        <span class="version">v2.0.0 • mock</span>
+    </aside>
+
+    <main class="main">
+        <div class="page-header">
+            <h1>Histórico de Grants</h1>
+            <div style="display:flex;gap:0.5rem">
+                <input type="search" placeholder="Buscar..." style="width:auto">
+                <select style="width:auto"><option>Todos os servidores</option><option>prod-mysql-01</option><option>prod-mysql-02</option><option>staging-db</option></select>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header"><h2>127 registros</h2></div>
+            <div class="table-wrapper">
+                <table class="striped">
+                    <thead><tr><th>Servidor</th><th>Usuário</th><th>Tipo</th><th>SQL</th><th>Status</th><th>Data</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>prod-mysql-01</strong></td><td><code>app_readonly</code></td><td><kbd>privilege</kbd></td>
+                            <td><small style="max-width:300px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">GRANT SELECT, INSERT ON app_db.* TO 'app_readonly'@'%'</small></td>
+                            <td><span class="status-dot ok"></span> OK</td><td><small>05/06/2026 14:32</small></td>
+                        </tr>
+                        <tr>
+                            <td><strong>staging-db</strong></td><td><code>dev_team</code></td><td><kbd>create_user</kbd></td>
+                            <td><small style="max-width:300px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">CREATE USER 'dev_team'@'%' IDENTIFIED BY '***'</small></td>
+                            <td><span class="status-dot ok"></span> OK</td><td><small>05/06/2026 11:15</small></td>
+                        </tr>
+                        <tr>
+                            <td><strong>prod-mysql-02</strong></td><td><code>bi_analyst</code></td><td><kbd>privilege</kbd></td>
+                            <td><small style="max-width:300px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">GRANT SELECT ON analytics.* TO 'bi_analyst'@'%'</small></td>
+                            <td><span class="status-dot err"></span> Erro</td><td><small>04/06/2026 17:48</small></td>
+                        </tr>
+                        <tr>
+                            <td><strong>prod-mysql-01</strong></td><td><code>api_service</code></td><td><kbd>role</kbd></td>
+                            <td><small style="max-width:300px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">GRANT read_only_role TO 'api_service'@'%'</small></td>
+                            <td><span class="status-dot ok"></span> OK</td><td><small>04/06/2026 09:20</small></td>
+                        </tr>
+                        <tr>
+                            <td><strong>replica-01</strong></td><td><code>repl_user</code></td><td><kbd>privilege</kbd></td>
+                            <td><small style="max-width:300px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">GRANT REPLICATION SLAVE ON *.* TO 'repl_user'@'%'</small></td>
+                            <td><span class="status-dot ok"></span> OK</td><td><small>02/06/2026 15:55</small></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <nav style="margin-top:1rem;display:flex;justify-content:center">
+                <ul style="margin-bottom:0">
+                    <li><a href="#">&laquo;</a></li>
+                    <li><a href="#" aria-current="page">1</a></li>
+                    <li><a href="#">2</a></li>
+                    <li><a href="#">3</a></li>
+                    <li><a href="#">&hellip;</a></li>
+                    <li><a href="#">13</a></li>
+                    <li><a href="#">&raquo;</a></li>
+                </ul>
+            </nav>
+        </div>
+    </main>
+</div>
+</body>
+</html>

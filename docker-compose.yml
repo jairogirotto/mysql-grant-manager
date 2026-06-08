@@ -11,6 +11,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./initdb:/docker-entrypoint-initdb.d
+      - ./my.cnf:/etc/mysql/conf.d/my.cnf:ro
     ports:
       - "3306:3306"
     healthcheck:
@@ -20,7 +21,7 @@ services:
       retries: 10
 
   app:
-    image: mgm:latest
+    image: mgm:alpha-1
     ports:
       - "5050:5050"
     environment:

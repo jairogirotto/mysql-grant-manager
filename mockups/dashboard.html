@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MySQL Grant Manager — Dashboard (Mock)</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+        :root { --sidebar-width: 240px; --brand: #6366f1; }
+        body { min-height: 100vh; margin: 0; }
+        .layout { display: flex; min-height: 100vh; }
+        .sidebar {
+            width: var(--sidebar-width); background: var(--pico-card-background-color);
+            border-right: 1px solid var(--pico-muted-border-color);
+            display: flex; flex-direction: column;
+            position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
+            padding: 1.25rem;
+        }
+        .sidebar .brand {
+            font-size: 1.05rem; font-weight: 700; color: var(--brand);
+            display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem;
+            text-decoration: none;
+        }
+        .sidebar nav { display: flex; flex-direction: column; gap: 2px; }
+        .sidebar nav a {
+            padding: 0.5rem 0.75rem; border-radius: 6px; color: var(--pico-color);
+            text-decoration: none; font-size: 0.875rem;
+            display: flex; align-items: center; gap: 0.6rem;
+            transition: background 0.15s, color 0.15s;
+        }
+        .sidebar nav a:hover { background: var(--pico-primary-hover-background); color: var(--pico-primary-inverse); }
+        .sidebar nav a.active { background: var(--brand); color: #fff; }
+        .sidebar .version { margin-top: auto; font-size: 0.7rem; color: var(--pico-muted-color); }
+        .sidebar .badge-count {
+            margin-left: auto; background: var(--pico-primary); color: var(--pico-primary-inverse);
+            padding: 1px 7px; border-radius: 10px; font-size: 0.7rem; font-weight: 600;
+        }
+        .main {
+            margin-left: var(--sidebar-width); flex: 1; padding: 1.5rem 2rem;
+            background: var(--pico-background-color);
+        }
+        .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.75rem; }
+        .page-header h1 { margin: 0; font-size: 1.4rem; }
+        .card-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem; margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: var(--pico-card-background-color); border: 1px solid var(--pico-card-border-color);
+            border-radius: 10px; padding: 1.25rem 1.5rem; display: flex; align-items: center; gap: 1rem;
+            text-decoration: none; color: inherit; transition: box-shadow 0.2s, transform 0.2s;
+        }
+        .stat-card:hover { box-shadow: 0 4px 20px rgba(99,102,241,0.15); transform: translateY(-2px); }
+        .stat-icon {
+            width: 44px; height: 44px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0;
+        }
+        .stat-icon.servers { background: #ede9fe; color: #7c3aed; }
+        .stat-icon.roles   { background: #fce7f3; color: #db2777; }
+        .stat-icon.grants  { background: #dbeafe; color: #2563eb; }
+        .stat-value { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+        .stat-label { font-size: 0.8rem; color: var(--pico-muted-color); }
+        .panel {
+            background: var(--pico-card-background-color); border: 1px solid var(--pico-card-border-color);
+            border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem;
+        }
+        .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .panel-header h2 { margin: 0; font-size: 1.05rem; }
+        .table-wrapper { overflow-x: auto; }
+        table { margin-bottom: 0; }
+        .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
+        .status-dot.ok  { background: #22c55e; }
+        .status-dot.err { background: #ef4444; }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar">
+        <a href="#" class="brand">🗄️ MySQL Grant Manager</a>
+        <nav>
+            <a href="dashboard.html" class="active">📊 Dashboard</a>
+            <a href="servers.html">🖥️ Servidores <span class="badge-count">4</span></a>
+            <a href="grants.html">🔑 Grants</a>
+            <a href="roles.html">👥 Roles <span class="badge-count">8</span></a>
+            <a href="history.html">📜 Histórico</a>
+        </nav>
+        <span class="version">v2.0.0 • mock</span>
+    </aside>
+
+    <main class="main">
+        <div class="page-header">
+            <h1>Dashboard</h1>
+            <button class="outline secondary small" onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark'">🌓</button>
+        </div>
+
+        <div class="card-grid">
+            <a href="servers.html" class="stat-card">
+                <div class="stat-icon servers">🖥️</div>
+                <div><div class="stat-value">4</div><div class="stat-label">Servidores ativos</div></div>
+            </a>
+            <a href="roles.html" class="stat-card">
+                <div class="stat-icon roles">👥</div>
+                <div><div class="stat-value">8</div><div class="stat-label">Roles gerenciados</div></div>
+            </a>
+            <a href="history.html" class="stat-card">
+                <div class="stat-icon grants">📜</div>
+                <div><div class="stat-value">127</div><div class="stat-label">Grants executados</div></div>
+            </a>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <h2>Grants recentes</h2>
+                <a href="history.html" class="small">Ver todos →</a>
+            </div>
+            <div class="table-wrapper">
+                <table class="striped">
+                    <thead><tr><th>Servidor</th><th>Usuário</th><th>Tipo</th><th>Status</th><th>Data</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>prod-mysql-01</td><td><code>app_readonly</code></td><td><kbd>SELECT, INSERT</kbd></td>
+                            <td><span class="status-dot ok"></span> OK</td><td><small>hoje, 14:32</small></td>
+                        </tr>
+                        <tr>
+                            <td>staging-db</td><td><code>dev_team</code></td><td><kbd>ALL PRIVILEGES</kbd></td>
+                            <td><span class="status-dot ok"></span> OK</td><td><small>hoje, 11:15</small></td>
+                        </tr>
+                        <tr>
+                            <td>prod-mysql-02</td><td><code>bi_analyst</code></td><td><kbd>SELECT</kbd></td>
+                            <td><span class="status-dot err"></span> Erro</td><td><small>ontem, 17:48</small></td>
+                        </tr>
+                        <tr>
+                            <td>prod-mysql-01</td><td><code>api_service</code></td><td><kbd>CREATE USER</kbd></td>
+                            <td><span class="status-dot ok"></span> OK</td><td><small>ontem, 09:20</small></td>
+                        </tr>
+                        <tr>
+                            <td>replica-01</td><td><code>repl_user</code></td><td><kbd>REPLICATION SLAVE</kbd></td>
+                            <td><span class="status-dot ok"></span> OK</td><td><small>12/06/2026</small></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+</body>
+</html>
