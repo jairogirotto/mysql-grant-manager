@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Gerenciar Grants</h1>
+<div class="page-header">
+    <h1>Gerenciar Grants</h1>
+</div>
 
-<div class="grants-tabs" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid #e5e7eb">
+<div class="tabs-bar">
     <button class="tab-btn active" onclick="switchTab('list-users-tab', this)">Listar Usuários</button>
     <button class="tab-btn" onclick="switchTab('create-user-tab', this)">Criar Usuário</button>
     <button class="tab-btn" onclick="switchTab('grant-tab', this)">Conceder Privilégios</button>
@@ -11,9 +13,9 @@
 <!-- ===== Listar Usuários ===== -->
 <div id="list-users-tab" class="form-card tab-content">
     <h3>Listar Usuários MySQL</h3>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+    <div class="flex-gap mb-1">
         <label style="margin:0">Servidor:
-            <select id="list-users-server" onchange="loadServerUsers()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:4px;margin-left:4px">
+            <select id="list-users-server" onchange="loadServerUsers()" style="width:auto;margin-left:4px">
                 <option value="">-- selecione --</option>
                 {% for s in servers %}
                 <option value="{{ s.id }}">{{ s.name }} ({{ s.host }})</option>
@@ -22,7 +24,7 @@
         </label>
     </div>
     <div id="list-users-content">
-        <p style="color:#6b7280;font-size:0.85rem">Selecione um servidor para listar os usuários.</p>
+        <p class="text-muted" style="font-size:0.82rem">Selecione um servidor para listar os usuários.</p>
     </div>
 </div>
 
@@ -45,38 +47,41 @@
         {% endfor %}
     </div>
 
-    <div style="margin-top:16px">
+    <div class="mt-2 flex-gap">
         <button class="btn btn-primary" onclick="createUserPreview()">Preview</button>
         <button class="btn btn-success" onclick="createUserExecute()">Criar Usuário</button>
     </div>
-    <div id="create-user-preview" style="display:none;margin-top:12px"></div>
-    <div id="create-user-result" style="margin-top:8px"></div>
+    <div id="create-user-preview" style="display:none" class="mt-2"></div>
+    <div id="create-user-result" class="mt-1"></div>
 </div>
 
 <!-- ===== Conceder Privilégios ===== -->
 <div id="grant-tab" class="form-card tab-content" style="display:none">
     <h3>Conceder Privilégios</h3>
 
-    <label>Tipo:
-        <select id="grantee-type" onchange="onGranteeTypeChange()" style="width:auto;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px">
-            <option value="user">Usuário</option>
-            <option value="role">Role</option>
-        </select>
-    </label>
+    <div class="flex-gap" style="margin-bottom:0.5rem">
+        <label style="margin:0">Tipo:
+            <select id="grantee-type" onchange="onGranteeTypeChange()" style="width:auto;margin-left:4px">
+                <option value="user">Usuário</option>
+                <option value="role">Role</option>
+            </select>
+        </label>
+    </div>
 
     <label id="grantee-label">Usuário MySQL: <input id="grantee-user" placeholder="app_user"></label>
     <label>Host de origem: <input id="grantee-host" value="%" placeholder="%"></label>
+
     <h4>Privilégios</h4>
-    <div style="display:flex;flex-wrap:wrap;gap:2px 16px;margin-bottom:8px;padding:8px;background:#f8fafc;border-radius:4px">
+    <div class="priv-group">
         {% for p in all_privileges %}
-        <label style="display:inline-flex;align-items:center;gap:4px;font-size:0.82rem;cursor:pointer">
+        <label style="display:inline-flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer">
             <input type="checkbox" class="priv-check priv-all" value="{{ p }}" onchange="onPrivAllChange(this)"> <strong>{{ p }}</strong>
         </label>
         {% endfor %}
     </div>
-    <div id="privileges-grid" style="display:flex;flex-wrap:wrap;gap:2px 16px;padding:8px;background:#f8fafc;border-radius:4px">
+    <div class="priv-group">
         {% for p in privileges %}
-        <label style="display:inline-flex;align-items:center;gap:4px;font-size:0.82rem;cursor:pointer">
+        <label style="display:inline-flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer">
             <input type="checkbox" class="priv-check" value="{{ p }}"> {{ p }}
         </label>
         {% endfor %}
@@ -94,25 +99,25 @@
         </label>
         {% endfor %}
     </div>
-    <small id="no-db-warning" style="color:#dc2626;display:none">
+    <small id="no-db-warning" style="color:var(--red);display:none">
         Execute <em>Refresh DBs</em> na página de Servidores antes de prosseguir.
     </small>
 
-    <div id="db-selectors" style="display:none;margin-top:12px">
+    <div id="db-selectors" style="display:none" class="mt-2">
         <h4>Databases por servidor</h4>
         <div id="per-server-dbs"></div>
     </div>
 
-    <div style="margin-top:16px">
+    <div class="mt-2 flex-gap">
         <button class="btn btn-primary" onclick="previewGrants()">Preview</button>
         <button class="btn btn-success" onclick="executeGrants()">Executar Grants</button>
     </div>
 
-    <div id="preview-area" style="display:none;margin-top:16px">
+    <div id="preview-area" style="display:none" class="mt-2">
         <h3>Preview</h3>
         <div id="preview-content"></div>
     </div>
-    <div id="result-area" style="display:none;margin-top:16px">
+    <div id="result-area" style="display:none" class="mt-2">
         <h3>Resultado</h3>
         <div id="result-content"></div>
     </div>
@@ -120,94 +125,63 @@
 {% endblock %}
 
 {% block scripts %}
-<style>
-.tab-btn {
-    padding: 8px 16px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    font-size: 0.85rem;
-    color: #6b7280;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -2px;
-}
-.tab-btn.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
-.tab-btn:hover { color: #374151; }
-.grant-tooltip {
-    position: fixed;
-    z-index: 9999;
-    background: #1e293b;
-    color: #e2e8f0;
-    padding: 10px 14px;
-    border-radius: 6px;
-    font-size: 0.78rem;
-    max-width: 500px;
-    white-space: pre-wrap;
-    word-break: break-all;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    pointer-events: none;
-}
-.grant-tooltip .tt-spinner { display: block; padding: 4px; }
-.user-grant-hover { cursor: help; border-bottom: 1px dotted #2563eb; }
-</style>
-
 <script>
 function switchTab(tabId, btn) {
-    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(function(el) { el.style.display = 'none'; });
+    document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
     document.getElementById(tabId).style.display = 'block';
     btn.classList.add('active');
 }
 
 async function loadServerUsers() {
-    const sid = document.getElementById('list-users-server').value;
-    const content = document.getElementById('list-users-content');
+    var sid = document.getElementById('list-users-server').value;
+    var content = document.getElementById('list-users-content');
     if (!sid) {
-        content.innerHTML = '<p style="color:#6b7280;font-size:0.85rem">Selecione um servidor para listar os usuários.</p>';
+        content.innerHTML = '<p class="text-muted" style="font-size:0.82rem">Selecione um servidor para listar os usuários.</p>';
         return;
     }
-    content.innerHTML = '<p style="color:#6b7280">Carregando...</p>';
+    content.innerHTML = '<p class="text-muted">Carregando...</p>';
     try {
-        const r = await fetch('/servers/' + sid + '/users');
-        const d = await r.json();
+        var r = await fetch('/servers/' + sid + '/users');
+        var d = await r.json();
         if (!d.ok) {
-            content.innerHTML = '<p class="toast-err" style="padding:8px;border-radius:4px">Erro: ' + d.error + '</p>';
+            content.innerHTML = '<p class="msg-err">Erro: ' + d.error + '</p>';
             return;
         }
         if (d.users.length === 0) {
-            content.innerHTML = '<p style="color:#6b7280">Nenhum usuário encontrado.</p>';
+            content.innerHTML = '<p class="text-muted">Nenhum usuário encontrado.</p>';
             return;
         }
-        let html = '<table><thead><tr><th>Usuário</th><th>Tipo</th><th style="width:80px;text-align:center">Ações</th></tr></thead><tbody>';
-        d.users.forEach(u => {
-            const parts = u.user_host.split('@');
-            const user = parts[0];
-            const host = parts.slice(1).join('@');
+        var html = '<table><thead><tr><th>Usuário</th><th>Tipo</th><th style="width:80px;text-align:center">Ações</th></tr></thead><tbody>';
+        d.users.forEach(function(u) {
+            var parts = u.user_host.split('@');
+            var user = parts[0];
+            var host = parts.slice(1).join('@');
             html += '<tr><td><code class="user-grant-hover" data-server="' + sid + '" data-user="' + user + '" data-host="' + host + '" onmouseenter="showGrantTooltip(event, this)" onmouseleave="hideGrantTooltip()">' + u.user_host + '</code></td>';
-            html += '<td>' + (u.is_role ? '<span class="badge" style="background:#ede9fe;color:#6b21a8">ROLE</span>' : '<span class="badge" style="background:#dbeafe;color:#1e40af">USUÁRIO</span>') + '</td>';
+            html += '<td>' + (u.is_role ? '<span class="badge" style="background:var(--purple-muted);color:var(--purple)">ROLE</span>' : '<span class="badge" style="background:var(--cyan-muted);color:var(--cyan)">USUÁRIO</span>') + '</td>';
             html += '<td style="text-align:center"><button class="btn btn-danger btn-sm" onclick="deleteUser(' + sid + ',\'' + user + '\',\'' + host + '\')">Excluir</button></td></tr>';
         });
         html += '</tbody></table>';
         content.innerHTML = html;
     } catch(e) {
-        content.innerHTML = '<p class="toast-err" style="padding:8px;border-radius:4px">Erro ao conectar.</p>';
+        content.innerHTML = '<p class="msg-err">Erro ao conectar.</p>';
     }
 }
 
 async function deleteUser(serverId, user, host) {
     if (!confirm('Excluir usuário ' + user + '@' + host + '? Esta ação executa DROP USER no MySQL e removerá todos os grants.')) return;
-    const r = await fetch('/servers/' + serverId + '/users/delete', {
+    var r = await fetch('/servers/' + serverId + '/users/delete', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
         body: JSON.stringify({grantee_user: user, grantee_host: host})
     });
-    const d = await r.json();
+    var d = await r.json();
     showToast(d.ok ? 'Usuário excluído.' : 'Erro: ' + d.error, d.ok);
     if (d.ok) loadServerUsers();
 }
 
-let _tooltipEl = null;
-let _tooltipTimer = null;
+var _tooltipEl = null;
+var _tooltipTimer = null;
 
 function hideGrantTooltip() {
     if (_tooltipTimer) clearTimeout(_tooltipTimer);
@@ -216,19 +190,19 @@ function hideGrantTooltip() {
 
 async function showGrantTooltip(event, el) {
     hideGrantTooltip();
-    _tooltipTimer = setTimeout(async () => {
-        const sid = el.dataset.server;
-        const user = el.dataset.user;
-        const host = el.dataset.host;
-        const tip = document.createElement('div');
+    _tooltipTimer = setTimeout(async function() {
+        var sid = el.dataset.server;
+        var user = el.dataset.user;
+        var host = el.dataset.host;
+        var tip = document.createElement('div');
         tip.className = 'grant-tooltip';
         tip.innerHTML = '<span class="tt-spinner">Carregando grants...</span>';
         document.body.appendChild(tip);
         _tooltipEl = tip;
         positionTooltip(event, tip);
         try {
-            const r = await fetch('/servers/' + sid + '/users/' + user + '/' + host + '/grants');
-            const d = await r.json();
+            var r = await fetch('/servers/' + sid + '/users/' + user + '/' + host + '/grants');
+            var d = await r.json();
             if (d.ok && d.grants.length > 0) {
                 tip.textContent = d.grants.join('\n');
             } else if (d.ok) {
@@ -244,42 +218,42 @@ async function showGrantTooltip(event, el) {
 }
 
 function positionTooltip(event, tip) {
-    const x = event.clientX + 12;
-    const y = event.clientY - 10;
+    var x = event.clientX + 12;
+    var y = event.clientY - 10;
     tip.style.left = Math.min(x, window.innerWidth - tip.offsetWidth - 10) + 'px';
     tip.style.top = Math.min(y, window.innerHeight - tip.offsetHeight - 10) + 'px';
 }
 
 function getChecked(cls) {
-    return Array.from(document.querySelectorAll('.' + cls + ':checked')).map(cb => cb.value);
+    return Array.from(document.querySelectorAll('.' + cls + ':checked')).map(function(cb) { return cb.value; });
 }
 
 // ===== Criar Usuário =====
 async function createUserPreview() {
-    const user = document.getElementById('create-user-name').value.trim();
-    const host = document.getElementById('create-user-host').value.trim() || '%';
-    const password = document.getElementById('create-user-password').value.trim();
-    const serverIds = getChecked('server-check-create');
+    var user = document.getElementById('create-user-name').value.trim();
+    var host = document.getElementById('create-user-host').value.trim() || '%';
+    var serverIds = getChecked('server-check-create');
 
     if (!user || serverIds.length === 0) {
         showToast('Preencha usuário e selecione servidores.', false);
         return;
     }
 
-    let html = '<h4>Preview</h4>';
-    document.querySelectorAll('.server-check-create:checked').forEach(cb => {
+    var html = '<h4>Preview</h4>';
+    document.querySelectorAll('.server-check-create:checked').forEach(function(cb) {
         html += '<p><strong>' + (cb.parentElement.querySelector('strong')?.textContent || cb.value) + '</strong>: '
             + '<pre>CREATE USER IF NOT EXISTS \'' + user + '\'@\'' + host + '\' IDENTIFIED BY \'***\'</pre></p>';
     });
-    document.getElementById('create-user-preview').style.display = 'block';
-    document.getElementById('create-user-preview').innerHTML = html;
+    var preview = document.getElementById('create-user-preview');
+    preview.style.display = 'block';
+    preview.innerHTML = html;
 }
 
 async function createUserExecute() {
-    const user = document.getElementById('create-user-name').value.trim();
-    const host = document.getElementById('create-user-host').value.trim() || '%';
-    const password = document.getElementById('create-user-password').value.trim();
-    const serverIds = getChecked('server-check-create');
+    var user = document.getElementById('create-user-name').value.trim();
+    var host = document.getElementById('create-user-host').value.trim() || '%';
+    var password = document.getElementById('create-user-password').value.trim();
+    var serverIds = getChecked('server-check-create');
 
     if (!user || !password || serverIds.length === 0) {
         showToast('Preencha usuário, senha e selecione servidores.', false);
@@ -287,14 +261,14 @@ async function createUserExecute() {
     }
     if (!confirm('Criar usuário ' + user + '@' + host + ' nos servidores selecionados?')) return;
 
-    const r = await fetch('/grants/create-user', {
+    var r = await fetch('/grants/create-user', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
         body: JSON.stringify({grantee_user: user, grantee_host: host, password: password, server_ids: serverIds})
     });
-    const d = await r.json();
-    let html = '<ul>';
-    d.results.forEach(r => {
+    var d = await r.json();
+    var html = '<ul>';
+    d.results.forEach(function(r) {
         html += '<li><strong>' + r.server_name + '</strong>: ';
         html += r.ok ? '<span class="badge badge-ok">OK</span>' : '<span class="badge badge-err">ERRO: ' + r.error + '</span>';
         html += '</li>';
@@ -307,48 +281,49 @@ async function createUserExecute() {
 
 // ===== Conceder Privilégios =====
 async function loadDatabasesForServer(sid) {
-    const r = await fetch('/servers/' + sid + '/databases');
-    const dbs = await r.json();
+    var r = await fetch('/servers/' + sid + '/databases');
+    var dbs = await r.json();
     document.getElementById('grant-db-count-' + sid).textContent = dbs.length + ' DBs';
     return dbs;
 }
 
 async function refreshServerSelection() {
-    const checked = document.querySelectorAll('.server-check:checked');
-    const container = document.getElementById('per-server-dbs');
-    const area = document.getElementById('db-selectors');
-    const warning = document.getElementById('no-db-warning');
+    var checked = document.querySelectorAll('.server-check:checked');
+    var container = document.getElementById('per-server-dbs');
+    var area = document.getElementById('db-selectors');
+    var warning = document.getElementById('no-db-warning');
 
     if (checked.length === 0) {
         area.style.display = 'none';
         return;
     }
 
-    let allHaveDbs = true;
+    var allHaveDbs = true;
     container.innerHTML = '';
 
-    for (const cb of checked) {
-        const sid = cb.value;
-        const name = cb.dataset.name;
-        let dbs = await loadDatabasesForServer(sid);
+    for (var i = 0; i < checked.length; i++) {
+        var cb = checked[i];
+        var sid = cb.value;
+        var name = cb.dataset.name;
+        var dbs = await loadDatabasesForServer(sid);
 
         if (dbs.length === 0) {
             allHaveDbs = false;
         }
 
-        const div = document.createElement('div');
+        var div = document.createElement('div');
         div.className = 'server-db-group';
         div.innerHTML = '<strong>' + name + '</strong>';
 
         if (dbs.length === 0) {
-            div.innerHTML += ' <em style="color:#dc2626">Nenhuma DB — execute Refresh</em>';
+            div.innerHTML += ' <em style="color:var(--red)">Nenhuma DB &mdash; execute Refresh</em>';
         } else {
-            const selectAll = document.createElement('label');
+            var selectAll = document.createElement('label');
             selectAll.innerHTML = '<input type="checkbox" class="db-select-all" onchange="toggleAllDbs(this, ' + sid + ')"> Todas';
             div.appendChild(selectAll);
 
-            dbs.forEach(db => {
-                const lbl = document.createElement('label');
+            dbs.forEach(function(db) {
+                var lbl = document.createElement('label');
                 lbl.innerHTML = '<input type="checkbox" class="db-check" data-server="' + sid + '" value="' + db + '"> ' + db;
                 div.appendChild(lbl);
             });
@@ -362,86 +337,85 @@ async function refreshServerSelection() {
 }
 
 function toggleAllDbs(el, sid) {
-    document.querySelectorAll('.db-check[data-server="' + sid + '"]').forEach(cb => {
+    document.querySelectorAll('.db-check[data-server="' + sid + '"]').forEach(function(cb) {
         cb.checked = el.checked;
     });
 }
 
 function onGranteeTypeChange() {
-    const isRole = document.getElementById('grantee-type').value === 'role';
+    var isRole = document.getElementById('grantee-type').value === 'role';
     document.getElementById('grantee-label').innerHTML = isRole ? 'Role MySQL: <input id="grantee-user" placeholder="app_readonly">' : 'Usuário MySQL: <input id="grantee-user" placeholder="app_user">';
 }
 
 function getSelectedPrivileges() {
-    const allChecked = document.querySelectorAll('.priv-all:checked');
+    var allChecked = document.querySelectorAll('.priv-all:checked');
     if (allChecked.length > 0) {
-        return Array.from(allChecked).map(cb => cb.value).join(', ');
+        return Array.from(allChecked).map(function(cb) { return cb.value; }).join(', ');
     }
-    const checked = document.querySelectorAll('.priv-check:not(.priv-all):checked');
-    return Array.from(checked).map(cb => cb.value).join(', ');
+    var checked = document.querySelectorAll('.priv-check:not(.priv-all):checked');
+    return Array.from(checked).map(function(cb) { return cb.value; }).join(', ');
 }
 
 function onPrivAllChange(el) {
-    const others = document.querySelectorAll('.priv-check:not(.priv-all)');
+    var others = document.querySelectorAll('.priv-check:not(.priv-all)');
     if (el.checked) {
-        others.forEach(cb => { cb.checked = false; cb.disabled = true; });
-        document.querySelectorAll('.priv-all').forEach(cb => { if (cb !== el) cb.checked = false; });
+        others.forEach(function(cb) { cb.checked = false; cb.disabled = true; });
+        document.querySelectorAll('.priv-all').forEach(function(cb) { if (cb !== el) cb.checked = false; });
     } else {
-        others.forEach(cb => { cb.disabled = false; });
+        others.forEach(function(cb) { cb.disabled = false; });
     }
 }
 
-document.querySelectorAll('.server-check').forEach(cb => {
+document.querySelectorAll('.server-check').forEach(function(cb) {
     cb.addEventListener('change', refreshServerSelection);
 });
 
 function getSelectedDatabases() {
-    const result = {};
-    document.querySelectorAll('.db-check:checked').forEach(cb => {
-        const sid = cb.dataset.server;
+    var result = {};
+    document.querySelectorAll('.db-check:checked').forEach(function(cb) {
+        var sid = cb.dataset.server;
         if (!result[sid]) result[sid] = [];
         result[sid].push(cb.value);
     });
-    document.querySelectorAll('.server-check:checked').forEach(cb => {
+    document.querySelectorAll('.server-check:checked').forEach(function(cb) {
         if (!result[cb.value]) result[cb.value] = [];
     });
     return result;
 }
 
 async function previewGrants() {
-    const serverIds = Array.from(document.querySelectorAll('.server-check:checked')).map(cb => cb.value);
-    const isRole = document.getElementById('grantee-type').value === 'role';
-    const privileges = getSelectedPrivileges();
+    var serverIds = Array.from(document.querySelectorAll('.server-check:checked')).map(function(cb) { return cb.value; });
+    var privileges = getSelectedPrivileges();
     if (!privileges) { showToast('Selecione ao menos um privilégio.', false); return; }
-    const payload = {
+    var payload = {
         server_ids: serverIds,
         grantee_user: document.getElementById('grantee-user').value,
         grantee_host: document.getElementById('grantee-host').value,
         privileges: privileges,
         databases: getSelectedDatabases(),
-        grantee_type: isRole ? 'role' : 'user'
+        grantee_type: document.getElementById('grantee-type').value === 'role' ? 'role' : 'user'
     };
 
-    const r = await fetch('/grants/preview', {
+    var r = await fetch('/grants/preview', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
         body: JSON.stringify(payload)
     });
-    const d = await r.json();
+    var d = await r.json();
 
-    const area = document.getElementById('preview-area');
-    const content = document.getElementById('preview-content');
+    var area = document.getElementById('preview-area');
+    var content = document.getElementById('preview-content');
 
     if (!d.ok) {
-        content.innerHTML = '<div class="toast-err">' + d.error + '</div>';
+        content.innerHTML = '<div class="msg-err">' + d.error + '</div>';
         area.style.display = 'block';
         return;
     }
 
-    let html = '';
-    d.preview.forEach(p => {
+    var html = '';
+    d.preview.forEach(function(p) {
         html += '<h4>' + p.server_name + ' (' + p.server_host + ')</h4>';
-        html += '<p>Databases: ' + p.databases.map(d => '<code>' + d + '</code>').join(', ') + '</p>';
+        html += '<p>Databases: ' + p.databases.map(function(d) { return '<code>' + d + '</code>'; }).join(', ') + '</p>';
         html += '<pre>' + p.statements.join('\n') + '</pre>';
     });
     content.innerHTML = html;
@@ -450,31 +424,30 @@ async function previewGrants() {
 
 async function executeGrants() {
     if (!confirm('Confirma execução dos grants?')) return;
-    const serverIds = Array.from(document.querySelectorAll('.server-check:checked')).map(cb => cb.value);
-    const isRole = document.getElementById('grantee-type').value === 'role';
-    const privileges = getSelectedPrivileges();
+    var serverIds = Array.from(document.querySelectorAll('.server-check:checked')).map(function(cb) { return cb.value; });
+    var privileges = getSelectedPrivileges();
     if (!privileges) { showToast('Selecione ao menos um privilégio.', false); return; }
-    const payload = {
+    var payload = {
         server_ids: serverIds,
         grantee_user: document.getElementById('grantee-user').value,
         grantee_host: document.getElementById('grantee-host').value,
         privileges: privileges,
         databases: getSelectedDatabases(),
-        grantee_type: isRole ? 'role' : 'user'
+        grantee_type: document.getElementById('grantee-type').value === 'role' ? 'role' : 'user'
     };
 
-    const r = await fetch('/grants/execute', {
+    var r = await fetch('/grants/execute', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
         body: JSON.stringify(payload)
     });
-    const d = await r.json();
+    var d = await r.json();
 
-    const area = document.getElementById('result-area');
-    const content = document.getElementById('result-content');
+    var area = document.getElementById('result-area');
+    var content = document.getElementById('result-content');
 
-    let html = '<ul>';
-    d.results.forEach(r => {
+    var html = '<ul>';
+    d.results.forEach(function(r) {
         html += '<li><strong>' + r.server_name + '</strong>: ';
         html += r.ok ? '<span class="badge badge-ok">OK</span>' : '<span class="badge badge-err">ERRO: ' + r.error + '</span>';
         html += '</li>';

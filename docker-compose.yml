@@ -21,7 +21,7 @@ services:
       retries: 10
 
   app:
-    image: mgm:alpha-1
+    image: mgm:ui1
     ports:
       - "5050:5050"
     environment:

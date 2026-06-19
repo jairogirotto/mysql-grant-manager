@@ -127,7 +127,12 @@ _ALLOWED_PRIVILEGES = {
     "CREATE", "CREATE ROUTINE", "CREATE TEMPORARY TABLES",
     "CREATE VIEW", "DELETE", "DROP", "EVENT", "EXECUTE",
     "GRANT OPTION", "INDEX", "INSERT", "LOCK TABLES",
-    "REFERENCES", "SELECT", "SHOW VIEW", "TRIGGER", "UPDATE",
+    "REFERENCES", "REPLICATION SLAVE", "SELECT", "SHOW VIEW",
+    "TRIGGER", "UPDATE",
+}
+
+_GLOBAL_PRIVILEGES = {
+    "REPLICATION SLAVE",
 }
 
 
@@ -342,18 +347,31 @@ def refresh_server_databases(server_id):
     return databases
 
 
+def _split_privileges(validated_priv_str):
+    parts = [p.strip() for p in validated_priv_str.split(",") if p.strip()]
+    global_privs = [p for p in parts if p in _GLOBAL_PRIVILEGES]
+    db_privs = [p for p in parts if p not in _GLOBAL_PRIVILEGES]
+    return ", ".join(global_privs) if global_privs else None, ", ".join(db_privs) if db_privs else None
+
+
 def execute_grant(server, grantee_user, grantee_host, privileges, databases):
     user = _validate_mysql_user_or_host(grantee_user)
     host = _validate_mysql_user_or_host(grantee_host)
     priv = _validate_privileges(privileges)
 
+    global_priv, db_priv = _split_privileges(priv)
+
     conn = mysql_connect(server)
     try:
         with conn.cursor() as cur:
-            for dbname in databases:
-                db = _safe_identifier(dbname)
-                stmt = f"GRANT {priv} ON {db}.* TO '{user}'@'{host}'"
+            if global_priv:
+                stmt = f"GRANT {global_priv} ON *.* TO '{user}'@'{host}'"
                 cur.execute(stmt)
+            if db_priv:
+                for dbname in databases:
+                    db = _safe_identifier(dbname)
+                    stmt = f"GRANT {db_priv} ON {db}.* TO '{user}'@'{host}'"
+                    cur.execute(stmt)
             cur.execute("FLUSH PRIVILEGES")
         conn.commit()
     finally:
@@ -763,6 +781,8 @@ def grants_preview():
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)})
 
+    global_priv, db_priv = _split_privileges(privileges)
+
     db = get_db()
     preview = []
     for sid in server_ids:
@@ -780,10 +800,13 @@ def grants_preview():
             dbs = [r["database_name"] for r in available]
 
         statements = []
-        for dbname in dbs:
-            safe_db = _safe_identifier(dbname)
-            stmt = f"GRANT {privileges} ON {safe_db}.* TO '{grantee_user}'@'{grantee_host}'"
-            statements.append(stmt)
+        if global_priv:
+            statements.append(f"GRANT {global_priv} ON *.* TO '{grantee_user}'@'{grantee_host}'")
+        if db_priv:
+            for dbname in dbs:
+                safe_db = _safe_identifier(dbname)
+                stmt = f"GRANT {db_priv} ON {safe_db}.* TO '{grantee_user}'@'{grantee_host}'"
+                statements.append(stmt)
 
         preview.append(
             {
@@ -813,6 +836,9 @@ def grants_execute():
     if not grantee_user or not privileges or not server_ids:
         return jsonify({"ok": False, "error": "Preencha usuário, privilégios e selecione servidores."})
 
+    validated_privs = _validate_privileges(privileges)
+    global_priv, db_priv = _split_privileges(validated_privs)
+
     db = get_db()
     results = []
 
@@ -830,7 +856,7 @@ def grants_execute():
             ).fetchall()
             dbs = [r["database_name"] for r in available]
 
-        if not dbs:
+        if not dbs and db_priv:
             results.append(
                 {
                     "server_name": server["name"],
@@ -841,8 +867,13 @@ def grants_execute():
             continue
 
         try:
-            execute_grant(dict(server), grantee_user, grantee_host, privileges, dbs)
-            stmt = f"GRANT {privileges} ON {', '.join('`' + d + '`.*' for d in dbs)} TO '{grantee_user}'@'{grantee_host}'"
+            execute_grant(dict(server), grantee_user, grantee_host, validated_privs, dbs)
+            parts = []
+            if global_priv:
+                parts.append(f"GRANT {global_priv} ON *.* TO '{grantee_user}'@'{grantee_host}'")
+            if db_priv and dbs:
+                parts.append(f"GRANT {db_priv} ON {', '.join('`' + d + '`.*' for d in dbs)} TO '{grantee_user}'@'{grantee_host}'")
+            stmt = "; ".join(parts)
             db.execute(
                 "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 1)",
@@ -851,7 +882,7 @@ def grants_execute():
                     server["name"],
                     grantee_user,
                     grantee_host,
-                    privileges,
+                    validated_privs,
                     json.dumps(dbs),
                     stmt,
                 ),
@@ -859,7 +890,12 @@ def grants_execute():
             db.commit()
             results.append({"server_name": server["name"], "ok": True})
         except Exception as e:
-            stmt = f"GRANT {privileges} ON {', '.join('`' + d + '`.*' for d in dbs)} TO '{grantee_user}'@'{grantee_host}'"
+            parts = []
+            if global_priv:
+                parts.append(f"GRANT {global_priv} ON *.* TO '{grantee_user}'@'{grantee_host}'")
+            if db_priv and dbs:
+                parts.append(f"GRANT {db_priv} ON {', '.join('`' + d + '`.*' for d in dbs)} TO '{grantee_user}'@'{grantee_host}'")
+            stmt = "; ".join(parts)
             db.execute(
                 "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, error_message) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s)",
@@ -868,7 +904,7 @@ def grants_execute():
                     server["name"],
                     grantee_user,
                     grantee_host,
-                    privileges,
+                    validated_privs,
                     json.dumps(dbs),
                     stmt,
                     str(e),

@@ -5,46 +5,120 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
     <title>MySQL Grant Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <nav>
-        <a href="{{ url_for('index') }}" class="logo">MySQL Grant Manager</a>
-        <div class="nav-links">
-            <a href="{{ url_for('index') }}">Dashboard</a>
-            <a href="{{ url_for('servers_list') }}">Servidores</a>
-            <a href="{{ url_for('grants_page') }}">Grants</a>
-            <a href="{{ url_for('roles_page') }}">Roles</a>
-            <a href="{{ url_for('history_page') }}">Histórico</a>
+<div class="app-layout">
+    <aside class="sidebar">
+        <a href="{{ url_for('index') }}" class="sidebar-brand">
+            <svg class="brand-icon" viewBox="0 0 32 32" fill="none">
+                <rect x="2" y="2" width="28" height="28" rx="6" stroke="#3fb950" stroke-width="2" fill="none"/>
+                <circle cx="10" cy="12" r="2.5" fill="#3fb950"/>
+                <circle cx="16" cy="12" r="2.5" fill="#3fb950"/>
+                <circle cx="22" cy="12" r="2.5" fill="#3fb950"/>
+                <rect x="4" y="20" width="24" height="4" rx="2" fill="#3fb950"/>
+            </svg>
+            <span class="brand-text">MySQL Grant<br>Manager</span>
+        </a>
+        <nav class="sidebar-nav">
+            <a href="{{ url_for('index') }}" data-nav="index">
+                <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="1" y="1" width="7" height="6" rx="1"/>
+                    <rect x="10" y="1" width="7" height="6" rx="1"/>
+                    <rect x="1" y="9" width="7" height="8" rx="1"/>
+                    <rect x="10" y="9" width="7" height="8" rx="1"/>
+                </svg>
+                <span>Dashboard</span>
+            </a>
+            <a href="{{ url_for('servers_list') }}" data-nav="servers">
+                <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="2" width="14" height="6" rx="1"/>
+                    <rect x="2" y="10" width="14" height="6" rx="1"/>
+                    <circle cx="6" cy="5" r="1" fill="currentColor" stroke="none"/>
+                    <circle cx="6" cy="13" r="1" fill="currentColor" stroke="none"/>
+                    <line x1="9" y1="5" x2="14" y2="5"/>
+                    <line x1="9" y1="13" x2="14" y2="13"/>
+                </svg>
+                <span>Servidores</span>
+            </a>
+            <a href="{{ url_for('grants_page') }}" data-nav="grants">
+                <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="7" cy="7" r="3.5"/>
+                    <path d="M9.5 9.5L14 14"/>
+                    <path d="M5 14l1.5-1.5"/>
+                    <path d="M10 5l-1.5 1.5"/>
+                </svg>
+                <span>Grants</span>
+            </a>
+            <a href="{{ url_for('roles_page') }}" data-nav="roles">
+                <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 2C5.7 2 3 4.2 3 7c0 1.8 1.2 3.4 3 4.5V16l3-1.5L12 16v-4.5c1.8-1.1 3-2.7 3-4.5 0-2.8-2.7-5-6-5z"/>
+                </svg>
+                <span>Roles</span>
+            </a>
+            <a href="{{ url_for('history_page') }}" data-nav="history">
+                <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="9" cy="9" r="7"/>
+                    <polyline points="9,4 9,9 13,9"/>
+                </svg>
+                <span>Histórico</span>
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            <span class="version">mgm v1.0</span>
         </div>
-    </nav>
-    <main>
+    </aside>
+
+    <main class="main-content">
         {% block content %}{% endblock %}
     </main>
-    <script>
-        function getCSRFToken() {
-            return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        }
+</div>
 
-        function showToast(msg, ok) {
-            const toast = document.createElement("div");
-            toast.className = "toast " + (ok ? "toast-ok" : "toast-err");
-            toast.textContent = msg;
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 4000);
+<script>
+(function() {
+    const path = window.location.pathname;
+    document.querySelectorAll('.sidebar-nav a[data-nav]').forEach(function(link) {
+        const nav = link.getAttribute('data-nav');
+        if (nav === 'index' && (path === '/' || path === '')) {
+            link.classList.add('active');
+        } else if (nav !== 'index' && path.indexOf('/' + nav) === 0) {
+            link.classList.add('active');
         }
+    });
+})();
 
-        function toggleSpinner(btn, show) {
-            btn.disabled = show;
-            btn.querySelector(".spinner")?.remove();
-            if (show) {
-                const sp = document.createElement("span");
-                sp.className = "spinner";
-                sp.textContent = "⏳ ";
-                btn.prepend(sp);
-            }
-        }
-    </script>
-    {% block scripts %}{% endblock %}
+function getCSRFToken() {
+    return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+}
+
+function showToast(msg, ok) {
+    var toast = document.createElement("div");
+    toast.className = "toast " + (ok ? "toast-ok" : "toast-err");
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(function() {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(60px)';
+        toast.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+        setTimeout(function() { toast.remove(); }, 250);
+    }, 4000);
+}
+
+function toggleSpinner(btn, show) {
+    btn.disabled = show;
+    var sp = btn.querySelector(".spinner");
+    if (sp) sp.remove();
+    if (show) {
+        sp = document.createElement("span");
+        sp.className = "spinner";
+        sp.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 019.95 9" stroke-linecap="round"/></svg>';
+        btn.prepend(sp);
+    }
+}
+</script>
+{% block scripts %}{% endblock %}
 </body>
 </html>

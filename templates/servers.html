@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Servidores MySQL</h1>
-
-<button class="btn btn-primary" onclick="document.getElementById('add-form').style.display='block'">+ Novo Servidor</button>
+<div class="page-header">
+    <h1>Servidores MySQL</h1>
+    <button class="btn btn-primary" onclick="document.getElementById('add-form').style.display='block'; this.style.display='none'">+ Novo Servidor</button>
+</div>
 
 <div id="add-form" class="form-card" style="display:none">
     <h3>Adicionar Servidor</h3>
@@ -14,8 +15,10 @@
         <label>Usuário admin: <input name="admin_user" required placeholder="root"></label>
         <label>Descrição: <input name="descricao" placeholder="Ex: Servidor de produção principal"></label>
         <label>Senha: <input name="admin_password" type="password" required></label>
-        <button class="btn btn-primary">Salvar</button>
-        <button type="button" class="btn" onclick="this.closest('#add-form').style.display='none'">Cancelar</button>
+        <div class="mt-2 flex-gap">
+            <button class="btn btn-primary">Salvar</button>
+            <button type="button" class="btn" onclick="document.getElementById('add-form').style.display='none'; document.querySelector('.page-header .btn-primary').style.display=''">Cancelar</button>
+        </div>
     </form>
 </div>
 
@@ -57,7 +60,7 @@
     </tbody>
 </table>
 {% else %}
-<p>Nenhum servidor cadastrado.</p>
+<div class="empty-state">Nenhum servidor cadastrado.</div>
 {% endif %}
 
 <div id="edit-form" class="form-card" style="display:none">
@@ -70,9 +73,11 @@
         <label>Porta: <input name="port" id="edit-port" type="number" value="3306"></label>
         <label>Descrição: <input name="descricao" id="edit-descricao" placeholder="Ex: Servidor de produção principal"></label>
         <label>Usuário admin: <input name="admin_user" id="edit-user" required></label>
-        <label>Senha (deixe em branco para manter): <input name="admin_password" type="password"></label>
-        <button class="btn btn-primary">Salvar</button>
-        <button type="button" class="btn" onclick="document.getElementById('edit-form').style.display='none'">Cancelar</button>
+        <label>Senha <small>(deixe em branco para manter)</small>: <input name="admin_password" type="password"></label>
+        <div class="mt-2 flex-gap">
+            <button class="btn btn-primary">Salvar</button>
+            <button type="button" class="btn" onclick="document.getElementById('edit-form').style.display='none'">Cancelar</button>
+        </div>
     </form>
 </div>
 {% endblock %}
@@ -92,11 +97,11 @@ function editServer(s) {
 }
 
 async function testConnection(id) {
-    const cell = document.getElementById('conn-status-' + id);
+    var cell = document.getElementById('conn-status-' + id);
     cell.textContent = '...';
     try {
-        const r = await fetch('/servers/' + id + '/test', {method:'POST', headers: {'X-CSRF-Token': getCSRFToken()}});
-        const d = await r.json();
+        var r = await fetch('/servers/' + id + '/test', {method:'POST', headers: {'X-CSRF-Token': getCSRFToken()}});
+        var d = await r.json();
         cell.innerHTML = d.ok ? '<span class="badge badge-ok">OK</span>' : '<span class="badge badge-err">FALHA</span>';
         showToast(d.ok ? 'Conexão OK' : 'Falha: ' + d.error, d.ok);
     } catch(e) {
@@ -105,12 +110,12 @@ async function testConnection(id) {
 }
 
 async function refreshDatabases(id) {
-    const btn = event.target;
+    var btn = event.target;
     toggleSpinner(btn, true);
-    const cell = document.getElementById('db-count-' + id);
+    var cell = document.getElementById('db-count-' + id);
     try {
-        const r = await fetch('/servers/' + id + '/refresh', {method:'POST', headers: {'X-CSRF-Token': getCSRFToken()}});
-        const d = await r.json();
+        var r = await fetch('/servers/' + id + '/refresh', {method:'POST', headers: {'X-CSRF-Token': getCSRFToken()}});
+        var d = await r.json();
         if (d.ok) {
             cell.textContent = d.databases.length;
             showToast(d.databases.length + ' databases encontradas', true);
@@ -124,13 +129,12 @@ async function refreshDatabases(id) {
     toggleSpinner(btn, false);
 }
 
-// Load database counts on page load
-document.querySelectorAll('[id^="db-count-"]').forEach(el => {
-    const sid = el.id.replace('db-count-', '');
+document.querySelectorAll('[id^="db-count-"]').forEach(function(el) {
+    var sid = el.id.replace('db-count-', '');
     fetch('/servers/' + sid + '/databases')
-        .then(r => r.json())
-        .then(dbs => { el.textContent = dbs.length; })
-        .catch(() => { el.textContent = '?'; });
+        .then(function(r) { return r.json(); })
+        .then(function(dbs) { el.textContent = dbs.length; })
+        .catch(function() { el.textContent = '?'; });
 });
 </script>
 {% endblock %}

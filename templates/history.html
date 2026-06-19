@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Histórico de Grants</h1>
+<div class="page-header">
+    <h1>Histórico de Grants</h1>
+</div>
 
 {% if history %}
-<p style="color:#6b7280;font-size:0.82rem;margin-bottom:8px">
-    Exibindo {{ (page - 1) * per_page + 1 }}–{{ [(page - 1) * per_page + history|length, total]|min }} de {{ total }} registros.
+<p class="info-bar">
+    Exibindo {{ (page - 1) * per_page + 1 }}&ndash;{{ [(page - 1) * per_page + history|length, total]|min }} de {{ total }} registros.
 </p>
 <table>
     <thead>
@@ -24,14 +26,16 @@
     {% for r in history %}
         <tr>
             <td>{{ r.executed_at|dtfmt }}</td>
-            <td><span class="badge" style="background:{% if r.grant_type == 'role' %}#ede9fe;color:#5b21b6{% else %}#dbeafe;color:#1e40af{% endif %}">{{ r.grant_type }}</span></td>
+            <td>
+                <span class="badge" style="background:{% if r.grant_type == 'role' %}var(--purple-muted){% else %}var(--cyan-muted){% endif %};color:{% if r.grant_type == 'role' %}var(--purple){% else %}var(--cyan){% endif %}">{{ r.grant_type }}</span>
+            </td>
             <td>{{ r.server_name }}</td>
             <td><code>{{ r.grantee_user }}</code></td>
             <td><code>{{ r.grantee_host }}</code></td>
             <td><code>{{ r.privileges }}</code></td>
             <td>
                 {% for db in (r.databases | from_json if r.databases else []) %}
-                <code>{{ db }}</code>{% if not loop.last %}, {% endif %}
+                <code>{{ db }}</code>{% if not loop.last %} {% endif %}
                 {% endfor %}
             </td>
             <td>
@@ -42,29 +46,29 @@
                 <br><small class="err-msg">{{ r.error_message[:80] }}</small>
                 {% endif %}
             </td>
-            <td><code style="font-size:0.75rem;word-break:break-all">{{ r.grant_statement[:120] }}{% if r.grant_statement|length > 120 %}...{% endif %}</code></td>
+            <td><code style="font-size:0.72rem;word-break:break-all">{{ r.grant_statement[:120] }}{% if r.grant_statement|length > 120 %}...{% endif %}</code></td>
         </tr>
     {% endfor %}
     </tbody>
 </table>
 
 {% if total_pages > 1 %}
-<div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:16px">
+<div class="pagination">
     {% if page > 1 %}
     <a class="btn btn-sm" href="{{ url_for('history_page', page=page-1) }}">Anterior</a>
     {% else %}
-    <span class="btn btn-sm" style="opacity:0.4;cursor:default">Anterior</span>
+    <span class="btn btn-sm" style="opacity:0.3">Anterior</span>
     {% endif %}
-    <span style="font-size:0.85rem;color:#374151">Página {{ page }} de {{ total_pages }}</span>
+    <span style="font-size:0.82rem;color:var(--text-secondary)">Página {{ page }} de {{ total_pages }}</span>
     {% if page < total_pages %}
     <a class="btn btn-sm" href="{{ url_for('history_page', page=page+1) }}">Próxima</a>
     {% else %}
-    <span class="btn btn-sm" style="opacity:0.4;cursor:default">Próxima</span>
+    <span class="btn btn-sm" style="opacity:0.3">Próxima</span>
     {% endif %}
 </div>
 {% endif %}
 
 {% else %}
-<p>Nenhum registro.</p>
+<div class="empty-state">Nenhum registro.</div>
 {% endif %}
 {% endblock %}

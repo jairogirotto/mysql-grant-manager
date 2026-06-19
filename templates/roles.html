@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Gerenciar Roles</h1>
+<div class="page-header">
+    <h1>Gerenciar Roles</h1>
+</div>
 
-<div class="roles-tabs" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid #e5e7eb">
+<div class="tabs-bar">
     <button class="tab-btn active" onclick="switchTab('create-tab', this)">Criar Role</button>
     <button class="tab-btn" onclick="switchTab('grant-tab', this)">Conceder Role</button>
     <button class="tab-btn" onclick="switchTab('default-tab', this)">Role Default</button>
@@ -26,10 +28,10 @@
         {% endfor %}
     </div>
 
-    <div style="margin-top:16px">
+    <div class="mt-2">
         <button class="btn btn-primary" onclick="createRole()">Criar Role</button>
     </div>
-    <div id="create-result" style="margin-top:8px"></div>
+    <div id="create-result" class="mt-1"></div>
 </div>
 
 <!-- ===== Grant Role ===== -->
@@ -39,8 +41,8 @@
     <label>Role: <input id="grant-role-name" placeholder="app_readonly"></label>
     <label>Usuário MySQL: <input id="grant-grantee-user" placeholder="app_user"></label>
     <label>Host de origem: <input id="grant-grantee-host" value="%" placeholder="%"></label>
-    <label>
-        <input type="checkbox" id="grant-set-default" checked>
+    <label style="font-weight:400">
+        <input type="checkbox" id="grant-set-default" checked style="width:auto">
         Definir como role padrão para o usuário
     </label>
 
@@ -55,11 +57,11 @@
         {% endfor %}
     </div>
 
-    <div style="margin-top:16px">
+    <div class="mt-2 flex-gap">
         <button class="btn btn-success" onclick="grantRole()">Conceder Role</button>
-        <button class="btn btn-danger" onclick="revokeRole()" style="margin-left:8px">Revogar Role</button>
+        <button class="btn btn-danger" onclick="revokeRole()">Revogar Role</button>
     </div>
-    <div id="grant-result" style="margin-top:8px"></div>
+    <div id="grant-result" class="mt-1"></div>
 </div>
 
 <!-- ===== Set Default Role ===== -->
@@ -82,17 +84,17 @@
         {% endfor %}
     </div>
 
-    <div style="margin-top:16px">
+    <div class="mt-2">
         <button class="btn btn-primary" onclick="setDefaultRole()">Definir Role Padrão</button>
     </div>
-    <div id="default-result" style="margin-top:8px"></div>
+    <div id="default-result" class="mt-1"></div>
 </div>
 
 <!-- ===== View Roles ===== -->
 <div id="view-tab" class="tab-content" style="display:none">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+    <div class="flex-gap mb-2">
         <label style="margin:0">Servidor:
-            <select id="view-server-select" onchange="loadRolesView()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:4px;margin-left:4px">
+            <select id="view-server-select" onchange="loadRolesView()" style="width:auto;margin-left:4px">
                 <option value="">-- selecione --</option>
                 {% for s in servers %}
                 <option value="{{ s.id }}">{{ s.name }} ({{ s.host }})</option>
@@ -103,64 +105,31 @@
     </div>
 
     <div id="view-roles-content"></div>
-    <div id="view-grants-content"></div>
+    <div id="view-grants-content" class="mt-2"></div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-<style>
-.tab-btn {
-    padding: 8px 16px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    font-size: 0.85rem;
-    color: #6b7280;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -2px;
-}
-.tab-btn.active {
-    color: #2563eb;
-    border-bottom-color: #2563eb;
-    font-weight: 600;
-}
-.tab-btn:hover { color: #374151; }
-.server-checkboxes { margin-top: 8px; }
-.server-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    background: #f8fafc;
-    border-radius: 4px;
-    margin-bottom: 4px;
-    cursor: pointer;
-    font-size: 0.85rem;
-}
-.server-row:hover { background: #e2e8f0; }
-.server-row code { font-size: 0.75rem; }
-</style>
-
 <script>
 function switchTab(tabId, btn) {
-    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(function(el) { el.style.display = 'none'; });
+    document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
     document.getElementById(tabId).style.display = 'block';
     btn.classList.add('active');
 }
 
 function getChecked(checkClass) {
-    return Array.from(document.querySelectorAll('.' + checkClass + ':checked')).map(cb => cb.value);
+    return Array.from(document.querySelectorAll('.' + checkClass + ':checked')).map(function(cb) { return cb.value; });
 }
 
 function showResult(containerId, data) {
-    const el = document.getElementById(containerId);
+    var el = document.getElementById(containerId);
     if (!data.ok) {
-        el.innerHTML = '<div class="toast-err" style="padding:8px;border-radius:4px">' + data.error + '</div>';
+        el.innerHTML = '<div class="msg-err">' + data.error + '</div>';
         return;
     }
-    let html = '<ul>';
-    data.results.forEach(r => {
+    var html = '<ul>';
+    data.results.forEach(function(r) {
         html += '<li><strong>' + r.server_name + '</strong>: ';
         html += r.ok ? '<span class="badge badge-ok">OK</span>' : '<span class="badge badge-err">ERRO: ' + r.error + '</span>';
         html += '</li>';
@@ -170,87 +139,87 @@ function showResult(containerId, data) {
 }
 
 async function createRole() {
-    const name = document.getElementById('create-role-name').value.trim();
-    const serverIds = getChecked('server-check-create');
+    var name = document.getElementById('create-role-name').value.trim();
+    var serverIds = getChecked('server-check-create');
     if (!name || serverIds.length === 0) {
         showToast('Preencha o nome da role e selecione servidores.', false);
         return;
     }
-    const r = await fetch('/roles/create', {
+    var r = await fetch('/roles/create', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
         body: JSON.stringify({role_name: name, server_ids: serverIds})
     });
-    const d = await r.json();
+    var d = await r.json();
     showResult('create-result', d);
     if (d.ok) showToast('Roles criadas.', true);
 }
 
 async function grantRole() {
-    const role = document.getElementById('grant-role-name').value.trim();
-    const user = document.getElementById('grant-grantee-user').value.trim();
-    const host = document.getElementById('grant-grantee-host').value.trim() || '%';
-    const serverIds = getChecked('server-check-grant');
+    var role = document.getElementById('grant-role-name').value.trim();
+    var user = document.getElementById('grant-grantee-user').value.trim();
+    var host = document.getElementById('grant-grantee-host').value.trim() || '%';
+    var serverIds = getChecked('server-check-grant');
     if (!role || !user || serverIds.length === 0) {
         showToast('Preencha role, usuário e selecione servidores.', false);
         return;
     }
     if (!confirm('Conceder role ' + role + ' para ' + user + '@' + host + '?')) return;
-    const r = await fetch('/roles/grant', {
+    var r = await fetch('/roles/grant', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
         body: JSON.stringify({role_name: role, grantee_user: user, grantee_host: host, server_ids: serverIds, set_default: document.getElementById('grant-set-default').checked})
     });
-    const d = await r.json();
+    var d = await r.json();
     showResult('grant-result', d);
     if (d.ok) showToast('Role concedida.', true);
 }
 
 async function revokeRole() {
-    const role = document.getElementById('grant-role-name').value.trim();
-    const user = document.getElementById('grant-grantee-user').value.trim();
-    const host = document.getElementById('grant-grantee-host').value.trim() || '%';
-    const serverIds = getChecked('server-check-grant');
+    var role = document.getElementById('grant-role-name').value.trim();
+    var user = document.getElementById('grant-grantee-user').value.trim();
+    var host = document.getElementById('grant-grantee-host').value.trim() || '%';
+    var serverIds = getChecked('server-check-grant');
     if (!role || !user || serverIds.length === 0) {
         showToast('Preencha role, usuário e selecione servidores.', false);
         return;
     }
     if (!confirm('Revogar role ' + role + ' de ' + user + '@' + host + '?')) return;
-    const r = await fetch('/roles/revoke', {
+    var r = await fetch('/roles/revoke', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
         body: JSON.stringify({role_name: role, grantee_user: user, grantee_host: host, server_ids: serverIds})
     });
-    const d = await r.json();
+    var d = await r.json();
     showResult('grant-result', d);
     if (d.ok) showToast('Role revogada.', true);
 }
 
 async function setDefaultRole() {
-    const user = document.getElementById('default-grantee-user').value.trim();
-    const host = document.getElementById('default-grantee-host').value.trim() || '%';
-    const role = document.getElementById('default-role-value').value.trim();
-    const serverIds = getChecked('server-check-default');
+    var user = document.getElementById('default-grantee-user').value.trim();
+    var host = document.getElementById('default-grantee-host').value.trim() || '%';
+    var role = document.getElementById('default-role-value').value.trim();
+    var serverIds = getChecked('server-check-default');
     if (!user || !role || serverIds.length === 0) {
         showToast('Preencha usuário, role e selecione servidores.', false);
         return;
     }
-    const r = await fetch('/roles/set-default', {
+    var r = await fetch('/roles/set-default', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
         body: JSON.stringify({grantee_user: user, grantee_host: host, default_role: role, server_ids: serverIds})
     });
-    const d = await r.json();
+    var d = await r.json();
     showResult('default-result', d);
     if (d.ok) showToast('Role padrão definida.', true);
 }
 
 async function syncRoles() {
-    const sid = document.getElementById('view-server-select').value;
+    var sid = document.getElementById('view-server-select').value;
     if (!sid) { showToast('Selecione um servidor.', false); return; }
     try {
-        const r = await fetch('/roles/' + sid + '/sync', {method:'POST', headers:{'X-CSRF-Token':getCSRFToken()}});
-        const d = await r.json();
+        var r = await fetch('/roles/' + sid + '/sync', {method:'POST', headers:{'X-CSRF-Token':getCSRFToken()}});
+        var d = await r.json();
         if (d.ok) {
             showToast('Sincronizado: ' + d.roles.length + ' roles, ' + d.grants.length + ' grants.', true);
             loadRolesView();
@@ -264,32 +233,32 @@ async function syncRoles() {
 
 async function dropRole(serverId, roleName) {
     if (!confirm('Remover role ' + roleName + ' do servidor? Esta ação executa DROP ROLE no MySQL.')) return;
-    const r = await fetch('/roles/' + serverId + '/drop', {
+    var r = await fetch('/roles/' + serverId + '/drop', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
         body: JSON.stringify({role_name: roleName})
     });
-    const d = await r.json();
+    var d = await r.json();
     showToast(d.ok ? 'Role removida.' : 'Erro: ' + d.error, d.ok);
     if (d.ok) loadRolesView();
 }
 
 async function loadRolesView() {
-    const sid = document.getElementById('view-server-select').value;
-    const rolesEl = document.getElementById('view-roles-content');
-    const grantsEl = document.getElementById('view-grants-content');
+    var sid = document.getElementById('view-server-select').value;
+    var rolesEl = document.getElementById('view-roles-content');
+    var grantsEl = document.getElementById('view-grants-content');
 
     if (!sid) { rolesEl.innerHTML = ''; grantsEl.innerHTML = ''; return; }
 
-    const r = await fetch('/roles/' + sid);
-    const d = await r.json();
+    var r = await fetch('/roles/' + sid);
+    var d = await r.json();
 
-    let html = '<h3>Roles Locais</h3>';
+    var html = '<h3>Roles Locais</h3>';
     if (d.roles.length === 0) {
-        html += '<p style="color:#6b7280">Nenhuma role cadastrada. Use Sync para importar do MySQL ou crie via a aba "Criar Role".</p>';
+        html += '<p class="text-muted">Nenhuma role cadastrada. Use Sync para importar do MySQL ou crie via a aba "Criar Role".</p>';
     } else {
         html += '<table><thead><tr><th>Role</th><th>Criada em</th><th>Ação</th></tr></thead><tbody>';
-        d.roles.forEach(r => {
+        d.roles.forEach(function(r) {
             html += '<tr><td><code>' + r.role_name + '</code></td>';
             html += '<td>' + (r.created_at || '').substring(0, 19) + '</td>';
             html += '<td><button class="btn btn-danger btn-sm" onclick="dropRole(' + sid + ',\'' + r.role_name + '\')">Remover</button></td></tr>';
@@ -300,10 +269,10 @@ async function loadRolesView() {
 
     html = '<h3>Grants de Roles</h3>';
     if (d.grants.length === 0) {
-        html += '<p style="color:#6b7280">Nenhum grant de role registrado.</p>';
+        html += '<p class="text-muted">Nenhum grant de role registrado.</p>';
     } else {
         html += '<table><thead><tr><th>Role</th><th>Usuário</th><th>Host</th></tr></thead><tbody>';
-        d.grants.forEach(g => {
+        d.grants.forEach(function(g) {
             html += '<tr><td><code>' + g.role_name + '</code></td>';
             html += '<td><code>' + g.grantee_user + '</code></td>';
             html += '<td><code>' + g.grantee_host + '</code></td></tr>';
