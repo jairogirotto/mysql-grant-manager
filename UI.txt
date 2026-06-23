@@ -1,0 +1,34 @@
+Sugestão 1: Command Center (Recomendada)
+Tema escuro, estética de painel de operações.
+- Fundo: cinza-carbono profundo (#0d1117), com um grid subtle noise de textura
+- Tipografia: JetBrains Mono para código/SQL + DM Sans para interface — contraste técnico vs limpo
+- Paleta: verde terminal (#3fb950) como cor de ação/sucesso, ciano (#58a6ff) para links, âmbar (#d29922) para avisos, vermelho (#f85149) para erros
+- Sidebar fixa com navegação colapsável, ícones SVG minimalistas, badge de contagem nos itens
+- Cards: glass-morphism leve (borda 1px semi-transparente, blur no fundo), sombras sutis
+- Tabelas: linhas alternadas com fundo #161b22, hover com highlight sutil
+- SQL previews: fundo terminal com syntax highlighting inline (keywords em cores)
+- Toast/notificações: borda lateral colorida animada, slide-in da direita
+Porquê: conecta com o universo CLI/terminal do MySQL, mas com polimento moderno de dashboard. DBAs se sentirão em casa.
+
+Sugestão 2: Brutalist Systems
+Minimalismo cru, tipografia bold, sem sombras.
+- Fundo: branco puro (#fff) com preto (#000) para elementos — sem tons de cinza
+- Tipografia: Space Mono + Archivo Black para headings — impacto máximo
+- Paleta: preto e branco com 1 cor de destaque — amarelo industrial (#ffdd00) para ações primárias
+- Bordas: grossas (2-3px), retas, sem border-radius
+- Cards: retângulos pretos com texto invertido para KPIs do dashboard
+- Nav: barra preta superior grossa, links sublinhados no hover com espessura de 3px
+- Forms: inputs com borda preta, labels em uppercase bold, sem backgrounds internos
+Porquê: máximo contraste, zero distração. DBAs experientes priorizam velocidade e clareza sobre enfeites.
+
+Sugestão 3: Midnight Terminal
+Híbrido de monitor CRT vintage com UI moderna.
+- Fundo: azul-escuro quase preto (#0a0e27) com scanlines sutis (CSS repeating-linear-gradient)
+- Tipografia: IBM Plex Mono para tudo — consistência terminal
+- Paleta: fósforo verde (#00ff41) e âmbar (#ffb000) contra fundo escuro, como um osciloscópio
+- Efeito CRT: leve glow nos textos, text-shadow nos headings
+- Cards: bordas com efeito phosphor (box-shadow verde/âmbar tênue)
+- Nav: barra lateral escura com ícones que "acendem" no hover (glow animation)
+- Loading: cursor blink (_) como indicador de carregamento
+- Tabelas: grid com linhas horizontais finas verde-escuras
+Porquê: extremamente memorável, cria identidade forte. O "terminal vintage" é inesperado para uma ferramenta de gestão e gera personalidade instantânea.

@@ -7,6 +7,7 @@
 <div class="tabs-bar">
     <button class="tab-btn active" onclick="switchTab('create-tab', this)">Criar Role</button>
     <button class="tab-btn" onclick="switchTab('grant-tab', this)">Conceder Role</button>
+    <button class="tab-btn" onclick="switchTab('grant-privs-tab', this)">Conceder Grants To Role</button>
     <button class="tab-btn" onclick="switchTab('default-tab', this)">Role Default</button>
     <button class="tab-btn" onclick="switchTab('view-tab', this)">Visualizar Roles</button>
 </div>
@@ -62,6 +63,74 @@
         <button class="btn btn-danger" onclick="revokeRole()">Revogar Role</button>
     </div>
     <div id="grant-result" class="mt-1"></div>
+</div>
+
+<!-- ===== Grant Privileges To Role ===== -->
+<div id="grant-privs-tab" class="form-card tab-content" style="display:none">
+    <h3>Conceder Grants a uma Role</h3>
+
+    <label>Role: <input id="grantprivs-role-name" placeholder="app_readonly" oninput="onGpRoleInputChange()"></label>
+
+    <div id="gp-role-area" style="display:none" class="mt-1">
+        <div id="gp-role-pool" class="gp-db-pool"></div>
+        <small style="color:var(--text-muted);margin-top:4px;display:block">
+            Clique em uma role para seleciona-la, ou digite manualmente no campo acima.
+            Roles nao sincronizadas nao aparecem aqui — use a aba Visualizar Roles &gt; Sync.
+        </small>
+    </div>
+
+    <h4>Privilégios</h4>
+    <div class="priv-group">
+        {% for p in all_privileges %}
+        <label style="display:inline-flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer">
+            <input type="checkbox" class="rp-priv-check rp-priv-all" value="{{ p }}" onchange="onRolePrivAllChange(this)"> <strong>{{ p }}</strong>
+        </label>
+        {% endfor %}
+    </div>
+    <div class="priv-group">
+        {% for p in privileges %}
+        <label style="display:inline-flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer">
+            <input type="checkbox" class="rp-priv-check" value="{{ p }}"> {{ p }}
+        </label>
+        {% endfor %}
+    </div>
+
+    <h4>Servidores</h4>
+    <div class="server-checkboxes">
+        {% for s in servers %}
+        <label class="server-row">
+            <input type="checkbox" class="server-check-grantprivs" value="{{ s.id }}" data-name="{{ s.name }}">
+            <strong>{{ s.name }}</strong>
+            <code>{{ s.host }}:{{ s.port }}</code>
+            <span class="db-count" id="gp-db-count-{{ s.id }}">-</span>
+            <span class="db-count" id="gp-role-count-{{ s.id }}">-</span>
+        </label>
+        {% endfor %}
+    </div>
+
+    <small id="gp-no-db-warning" style="color:var(--red);display:none">
+        Execute <em>Refresh DBs</em> na pagina de Servidores antes de prosseguir.
+    </small>
+
+    <div id="gp-db-area" style="display:none" class="mt-2">
+        <h4>Databases disponiveis</h4>
+        <div id="gp-db-pool" class="gp-db-pool"></div>
+
+        <h4>Databases selecionadas</h4>
+        <div id="gp-db-selected" class="gp-db-pool gp-drop-zone">
+            <span class="gp-placeholder">Nenhuma database selecionada &mdash; serao aplicadas <strong>todas</strong> as databases de cada servidor.</span>
+        </div>
+
+        <div class="flex-gap mt-1">
+            <button class="btn btn-sm" onclick="gpAddAllDbs()">Adicionar todas</button>
+            <button class="btn btn-sm btn-danger" onclick="gpClearDbs()">Limpar caixa</button>
+        </div>
+    </div>
+
+    <div class="mt-2">
+        <button class="btn btn-success" onclick="grantPrivsToRole()">Conceder Grants</button>
+    </div>
+    <div id="grantprivs-result" class="mt-1"></div>
 </div>
 
 <!-- ===== Set Default Role ===== -->
@@ -212,6 +281,264 @@ async function setDefaultRole() {
     var d = await r.json();
     showResult('default-result', d);
     if (d.ok) showToast('Role padrão definida.', true);
+}
+
+function onRolePrivAllChange(el) {
+    var alls = document.querySelectorAll('.rp-priv-all');
+    var others = document.querySelectorAll('.rp-priv-check:not(.rp-priv-all)');
+    if (el.checked) {
+        alls.forEach(function(c) { if (c !== el) { c.checked = false; } });
+        others.forEach(function(c) { c.checked = false; c.disabled = true; });
+    } else {
+        others.forEach(function(c) { c.disabled = false; });
+    }
+}
+
+function gatherRolePrivileges() {
+    var checkedAll = document.querySelector('.rp-priv-all:checked');
+    if (checkedAll) return checkedAll.value;
+    return Array.from(document.querySelectorAll('.rp-priv-check:not(.rp-priv-all):checked'))
+        .map(function(c) { return c.value; }).join(', ');
+}
+
+var gpSelectedDbs = new Set();
+var gpSelectedRole = null;
+
+async function loadGpRoles(sid) {
+    var r = await fetch('/roles/' + sid);
+    var d = await r.json();
+    var el = document.getElementById('gp-role-count-' + sid);
+    if (el) el.textContent = d.roles.length + ' roles';
+    return d.roles.map(function(role) { return role.role_name; });
+}
+
+async function refreshGpRoleSelection() {
+    var checked = document.querySelectorAll('.server-check-grantprivs:checked');
+    var area = document.getElementById('gp-role-area');
+    var pool = document.getElementById('gp-role-pool');
+
+    if (checked.length === 0) {
+        area.style.display = 'none';
+        return;
+    }
+    area.style.display = 'block';
+
+    var allRoleNames = new Set();
+    for (var i = 0; i < checked.length; i++) {
+        var sid = checked[i].value;
+        var roles = await loadGpRoles(sid);
+        roles.forEach(function(r) { allRoleNames.add(r); });
+    }
+
+    pool.innerHTML = '';
+
+    if (allRoleNames.size === 0) {
+        var em = document.createElement('em');
+        em.style.cssText = 'color:var(--red);font-size:0.72rem;padding:0.35rem 0';
+        em.textContent = 'Nenhuma role sincronizada — use a aba Visualizar Roles > Sync';
+        pool.appendChild(em);
+    } else {
+        allRoleNames.forEach(function(role) {
+            var chip = document.createElement('span');
+            chip.className = 'gp-chip';
+            if (gpSelectedRole === role) chip.classList.add('role-selected');
+            chip.textContent = role;
+            chip.setAttribute('tabindex', '0');
+            chip.setAttribute('role', 'button');
+            chip.title = 'Clique para selecionar ' + role;
+            chip.addEventListener('click', function() { selectGpRole(role); });
+            chip.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectGpRole(role); } });
+            pool.appendChild(chip);
+        });
+    }
+}
+
+function selectGpRole(roleName) {
+    gpSelectedRole = roleName;
+    document.getElementById('grantprivs-role-name').value = roleName;
+    document.querySelectorAll('#gp-role-pool .gp-chip').forEach(function(chip) {
+        if (chip.textContent === roleName) {
+            chip.classList.add('role-selected');
+        } else {
+            chip.classList.remove('role-selected');
+        }
+    });
+}
+
+function onGpRoleInputChange() {
+    var current = document.getElementById('grantprivs-role-name').value.trim();
+    if (current !== gpSelectedRole) {
+        gpSelectedRole = null;
+        document.querySelectorAll('#gp-role-pool .gp-chip').forEach(function(chip) {
+            chip.classList.remove('role-selected');
+        });
+    }
+}
+
+async function loadGpDatabases(sid) {
+    var r = await fetch('/servers/' + sid + '/databases');
+    var dbs = await r.json();
+    var el = document.getElementById('gp-db-count-' + sid);
+    if (el) el.textContent = dbs.length + ' DBs';
+    return dbs;
+}
+
+async function refreshGpServerSelection() {
+    var checked = document.querySelectorAll('.server-check-grantprivs:checked');
+    var area = document.getElementById('gp-db-area');
+    var pool = document.getElementById('gp-db-pool');
+    var warning = document.getElementById('gp-no-db-warning');
+
+    if (checked.length === 0) {
+        area.style.display = 'none';
+        return;
+    }
+
+    var allHaveDbs = true;
+    pool.innerHTML = '';
+
+    for (var i = 0; i < checked.length; i++) {
+        var cb = checked[i];
+        var sid = cb.value;
+        var name = cb.dataset.name;
+        var dbs = await loadGpDatabases(sid);
+
+        if (dbs.length === 0) {
+            allHaveDbs = false;
+        }
+
+        var group = document.createElement('div');
+        group.className = 'gp-server-group';
+
+        var label = document.createElement('div');
+        label.className = 'gp-server-label';
+        label.textContent = name;
+        group.appendChild(label);
+
+        if (dbs.length === 0) {
+            var em = document.createElement('em');
+            em.style.cssText = 'color:var(--red);font-size:0.72rem';
+            em.textContent = 'Nenhuma DB — execute Refresh';
+            group.appendChild(em);
+        } else {
+            dbs.forEach(function(db) {
+                var chip = document.createElement('span');
+                chip.className = 'gp-chip';
+                if (gpSelectedDbs.has(db)) {
+                    chip.classList.add('selected');
+                }
+                chip.textContent = db;
+                chip.setAttribute('tabindex', '0');
+                chip.setAttribute('role', 'button');
+                chip.title = 'Clique para adicionar/remover ' + db;
+                chip.addEventListener('click', function() { toggleGpDbChip(db); });
+                chip.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGpDbChip(db); } });
+                group.appendChild(chip);
+            });
+        }
+
+        pool.appendChild(group);
+    }
+
+    area.style.display = 'block';
+    warning.style.display = allHaveDbs ? 'none' : 'block';
+    updateGpSelectedPanel();
+}
+
+function toggleGpDbChip(dbName) {
+    if (gpSelectedDbs.has(dbName)) {
+        gpSelectedDbs.delete(dbName);
+    } else {
+        gpSelectedDbs.add(dbName);
+    }
+    updateGpSelectedPanel();
+    refreshGpChipStates();
+}
+
+function refreshGpChipStates() {
+    document.querySelectorAll('#gp-db-pool .gp-chip').forEach(function(chip) {
+        if (gpSelectedDbs.has(chip.textContent)) {
+            chip.classList.add('selected');
+        } else {
+            chip.classList.remove('selected');
+        }
+    });
+}
+
+function updateGpSelectedPanel() {
+    var panel = document.getElementById('gp-db-selected');
+    var placeholder = panel.querySelector('.gp-placeholder');
+
+    panel.querySelectorAll('.gp-chip').forEach(function(c) { c.remove(); });
+
+    if (gpSelectedDbs.size === 0) {
+        if (!placeholder) {
+            var ph = document.createElement('span');
+            ph.className = 'gp-placeholder';
+            ph.innerHTML = 'Nenhuma database selecionada &mdash; serao aplicadas <strong>todas</strong> as databases de cada servidor.';
+            panel.appendChild(ph);
+        } else {
+            placeholder.style.display = '';
+        }
+    } else {
+        if (placeholder) placeholder.style.display = 'none';
+        gpSelectedDbs.forEach(function(db) {
+            var chip = document.createElement('span');
+            chip.className = 'gp-chip selected';
+            chip.innerHTML = db + '<span class="chip-remove" title="Remover">&times;</span>';
+            chip.querySelector('.chip-remove').addEventListener('click', function(e) {
+                e.stopPropagation();
+                toggleGpDbChip(db);
+            });
+            chip.addEventListener('click', function() { toggleGpDbChip(db); });
+            panel.appendChild(chip);
+        });
+    }
+}
+
+function gpAddAllDbs() {
+    document.querySelectorAll('#gp-db-pool .gp-chip').forEach(function(chip) {
+        gpSelectedDbs.add(chip.textContent);
+    });
+    updateGpSelectedPanel();
+    refreshGpChipStates();
+}
+
+function gpClearDbs() {
+    gpSelectedDbs.clear();
+    updateGpSelectedPanel();
+    refreshGpChipStates();
+}
+
+function getSelectedRoleDatabases() {
+    return Array.from(gpSelectedDbs);
+}
+
+document.querySelectorAll('.server-check-grantprivs').forEach(function(cb) {
+    cb.addEventListener('change', function() {
+        refreshGpServerSelection();
+        refreshGpRoleSelection();
+    });
+});
+
+async function grantPrivsToRole() {
+    var role = document.getElementById('grantprivs-role-name').value.trim();
+    var privileges = gatherRolePrivileges();
+    var databases = getSelectedRoleDatabases();
+    var serverIds = getChecked('server-check-grantprivs');
+    if (!role || !privileges || serverIds.length === 0) {
+        showToast('Preencha role, privilégios e selecione servidores.', false);
+        return;
+    }
+    if (!confirm('Conceder ' + privileges + ' à role ' + role + '?')) return;
+    var r = await fetch('/roles/grant-privs', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
+        body: JSON.stringify({role_name: role, privileges: privileges, databases: databases, server_ids: serverIds})
+    });
+    var d = await r.json();
+    showResult('grantprivs-result', d);
+    if (d.ok) showToast('Grants concedidos à role.', true);
 }
 
 async function syncRoles() {

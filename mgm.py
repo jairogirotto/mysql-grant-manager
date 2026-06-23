@@ -378,6 +378,30 @@ def execute_grant(server, grantee_user, grantee_host, privileges, databases):
         conn.close()
 
 
+def execute_revoke(server, grantee_user, grantee_host, privileges, databases, revoke_all=False):
+    user = _validate_mysql_user_or_host(grantee_user)
+    host = _validate_mysql_user_or_host(grantee_host)
+
+    conn = mysql_connect(server)
+    try:
+        with conn.cursor() as cur:
+            if revoke_all:
+                cur.execute(f"REVOKE ALL PRIVILEGES, GRANT OPTION FROM '{user}'@'{host}'")
+            else:
+                priv = _validate_privileges(privileges)
+                global_priv, db_priv = _split_privileges(priv)
+                if global_priv:
+                    cur.execute(f"REVOKE {global_priv} ON *.* FROM '{user}'@'{host}'")
+                if db_priv:
+                    for dbname in databases:
+                        db_id = _safe_identifier(dbname)
+                        cur.execute(f"REVOKE {db_priv} ON {db_id}.* FROM '{user}'@'{host}'")
+            cur.execute("FLUSH PRIVILEGES")
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _validate_role_name(value):
     v = str(value).strip()
     if not re.match(r"^[a-zA-Z0-9_\-\.\%]+$", v):
@@ -481,8 +505,15 @@ def mysql_discover_users(server):
     conn = mysql_connect(server)
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT CONCAT(user, '@', host) as user_host, account_locked FROM mysql.user ORDER BY user, host")
-            users = [{"user_host": row[0], "is_role": row[1] == 'Y'} for row in cur.fetchall()]
+            cur.execute(
+                "SELECT CONCAT(user, '@', host) as user_host, account_locked, "
+                "authentication_string FROM mysql.user ORDER BY user, host"
+            )
+            users = []
+            for row in cur.fetchall():
+                locked = row[1] == 'Y'
+                is_role = locked and (not row[2])
+                users.append({"user_host": row[0], "is_role": is_role, "locked": locked})
         return users
     finally:
         conn.close()
@@ -657,6 +688,9 @@ def servers_users_delete(server_id):
     if not grantee_user:
         return jsonify({"ok": False, "error": "User is required."})
 
+    if grantee_user.lower() == "root":
+        return jsonify({"ok": False, "error": "O usuário root não pode ser excluído."})
+
     db = get_db()
     server = db.execute("SELECT * FROM servers WHERE id = %s", (server_id,)).fetchone()
     if not server:
@@ -688,6 +722,59 @@ def servers_users_delete(server_id):
                 "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, error_message, grant_type) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, 'user')",
                 (server_id, server["name"], grantee_user, grantee_host, "DROP USER", "[]", stmt, str(e)),
+            )
+            db.commit()
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/servers/<int:server_id>/users/lock", methods=["POST"])
+@auth_required
+@csrf_protect
+def servers_users_lock(server_id):
+    data = request.get_json()
+    grantee_user = data.get("grantee_user", "").strip()
+    grantee_host = data.get("grantee_host", "%").strip() or "%"
+    action = data.get("action", "").strip().lower()
+
+    if not grantee_user:
+        return jsonify({"ok": False, "error": "User is required."})
+    if action not in ("lock", "unlock"):
+        return jsonify({"ok": False, "error": "Action must be 'lock' or 'unlock'."})
+
+    db = get_db()
+    server = db.execute("SELECT * FROM servers WHERE id = %s", (server_id,)).fetchone()
+    if not server:
+        return jsonify({"ok": False, "error": "Server not found"}), 404
+
+    try:
+        u = _validate_mysql_user_or_host(grantee_user)
+        h = _validate_mysql_user_or_host(grantee_host)
+        account_action = "LOCK" if action == "lock" else "UNLOCK"
+        stmt = f"ALTER USER '{u}'@'{h}' ACCOUNT {account_action}"
+        conn = mysql_connect(dict(server))
+        try:
+            with conn.cursor() as cur:
+                cur.execute(stmt)
+            conn.commit()
+        finally:
+            conn.close()
+
+        db.execute(
+            "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, grant_type) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'user')",
+            (server_id, server["name"], grantee_user, grantee_host, f"ACCOUNT {account_action}", "[]", stmt),
+        )
+        db.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        stmt = f"ALTER USER '{grantee_user}'@'{grantee_host}' ACCOUNT {account_action}"
+        try:
+            db.execute(
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, error_message, grant_type) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, 'user')",
+                (server_id, server["name"], grantee_user, grantee_host, f"ACCOUNT {account_action}", "[]", stmt, str(e)),
             )
             db.commit()
         except Exception:
@@ -916,6 +1003,160 @@ def grants_execute():
     return jsonify({"ok": True, "results": results})
 
 
+@app.route("/grants/revoke/preview", methods=["POST"])
+@auth_required
+@csrf_protect
+def grants_revoke_preview():
+    data = request.get_json()
+    server_ids = data.get("server_ids", [])
+    grantee_user = data.get("grantee_user", "").strip()
+    grantee_host = data.get("grantee_host", "%").strip() or "%"
+    privileges = data.get("privileges", "").strip()
+    revoke_all = data.get("revoke_all", False)
+    per_server_databases = data.get("databases", {})
+
+    if not grantee_user or not server_ids:
+        return jsonify({"ok": False, "error": "Preencha usuário e selecione servidores."})
+
+    if grantee_user.lower() == "root":
+        return jsonify({"ok": False, "error": "O usuário root é protegido. Não é permitido revogar seus privilégios."})
+
+    if not revoke_all and not privileges:
+        return jsonify({"ok": False, "error": "Selecione privilégios para revogar ou marque 'Revogar Todos'."})
+
+    if not revoke_all:
+        try:
+            privileges = _validate_privileges(privileges)
+        except ValueError as e:
+            return jsonify({"ok": False, "error": str(e)})
+
+    db = get_db()
+    preview = []
+    for sid in server_ids:
+        sid = int(sid)
+        server = db.execute("SELECT * FROM servers WHERE id = %s", (sid,)).fetchone()
+        if not server:
+            continue
+
+        statements = []
+        if revoke_all:
+            statements.append(f"REVOKE ALL PRIVILEGES, GRANT OPTION FROM '{grantee_user}'@'{grantee_host}'")
+        else:
+            global_priv, db_priv = _split_privileges(privileges)
+            if global_priv:
+                statements.append(f"REVOKE {global_priv} ON *.* FROM '{grantee_user}'@'{grantee_host}'")
+            if db_priv:
+                dbs = per_server_databases.get(str(sid), [])
+                if not dbs:
+                    available = db.execute(
+                        "SELECT database_name FROM server_databases WHERE server_id = %s",
+                        (sid,),
+                    ).fetchall()
+                    dbs = [r["database_name"] for r in available]
+                for dbname in dbs:
+                    safe_db = _safe_identifier(dbname)
+                    statements.append(f"REVOKE {db_priv} ON {safe_db}.* FROM '{grantee_user}'@'{grantee_host}'")
+
+        statements.append("FLUSH PRIVILEGES")
+        dbs_display = per_server_databases.get(str(sid), []) if not revoke_all else ["*.*"]
+        preview.append({
+            "server_id": sid,
+            "server_name": server["name"],
+            "server_host": server["host"],
+            "databases": dbs_display,
+            "statements": statements,
+        })
+
+    return jsonify({"ok": True, "preview": preview})
+
+
+@app.route("/grants/revoke/execute", methods=["POST"])
+@auth_required
+@csrf_protect
+def grants_revoke_execute():
+    data = request.get_json()
+    server_ids = data.get("server_ids", [])
+    grantee_user = data.get("grantee_user", "").strip()
+    grantee_host = data.get("grantee_host", "%").strip() or "%"
+    privileges = data.get("privileges", "").strip()
+    revoke_all = data.get("revoke_all", False)
+    per_server_databases = data.get("databases", {})
+
+    if not grantee_user or not server_ids:
+        return jsonify({"ok": False, "error": "Preencha usuário e selecione servidores."})
+
+    if grantee_user.lower() == "root":
+        return jsonify({"ok": False, "error": "O usuário root é protegido. Não é permitido revogar seus privilégios."})
+
+    if not revoke_all and not privileges:
+        return jsonify({"ok": False, "error": "Selecione privilégios para revogar ou marque 'Revogar Todos'."})
+
+    validated_privs = ""
+    if not revoke_all:
+        validated_privs = _validate_privileges(privileges)
+
+    db = get_db()
+    results = []
+
+    for sid in server_ids:
+        sid = int(sid)
+        server = db.execute("SELECT * FROM servers WHERE id = %s", (sid,)).fetchone()
+        if not server:
+            continue
+
+        dbs = per_server_databases.get(str(sid), [])
+        if not revoke_all and not dbs:
+            available = db.execute(
+                "SELECT database_name FROM server_databases WHERE server_id = %s",
+                (sid,),
+            ).fetchall()
+            dbs = [r["database_name"] for r in available]
+
+        try:
+            execute_revoke(dict(server), grantee_user, grantee_host, validated_privs, dbs, revoke_all=revoke_all)
+            if revoke_all:
+                stmt = f"REVOKE ALL PRIVILEGES, GRANT OPTION FROM '{grantee_user}'@'{grantee_host}'"
+                priv_display = "ALL PRIVILEGES, GRANT OPTION"
+            else:
+                global_priv, db_priv = _split_privileges(validated_privs)
+                parts = []
+                if global_priv:
+                    parts.append(f"REVOKE {global_priv} ON *.* FROM '{grantee_user}'@'{grantee_host}'")
+                if db_priv and dbs:
+                    parts.append(f"REVOKE {db_priv} ON {', '.join('`' + d + '`.*' for d in dbs)} FROM '{grantee_user}'@'{grantee_host}'")
+                stmt = "; ".join(parts)
+                priv_display = validated_privs
+            db.execute(
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, grant_type) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'revoke')",
+                (sid, server["name"], grantee_user, grantee_host, priv_display, json.dumps(dbs if not revoke_all else []), stmt),
+            )
+            db.commit()
+            results.append({"server_name": server["name"], "ok": True})
+        except Exception as e:
+            if revoke_all:
+                stmt = f"REVOKE ALL PRIVILEGES, GRANT OPTION FROM '{grantee_user}'@'{grantee_host}'"
+                priv_display = "ALL PRIVILEGES, GRANT OPTION"
+            else:
+                global_priv, db_priv = _split_privileges(validated_privs)
+                parts = []
+                if global_priv:
+                    parts.append(f"REVOKE {global_priv} ON *.* FROM '{grantee_user}'@'{grantee_host}'")
+                if db_priv and dbs:
+                    parts.append(f"REVOKE {db_priv} ON {', '.join('`' + d + '`.*' for d in dbs)} FROM '{grantee_user}'@'{grantee_host}'")
+                stmt = "; ".join(parts)
+                priv_display = validated_privs
+            db.execute(
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, error_message, grant_type) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, 'revoke')",
+                (sid, server["name"], grantee_user, grantee_host, priv_display, json.dumps(dbs if not revoke_all else []), stmt, str(e)),
+            )
+            db.commit()
+            results.append({"server_name": server["name"], "ok": False, "error": str(e)})
+
+    return jsonify({"ok": True, "results": results})
+
+
 @app.route("/history")
 @auth_required
 def history_page():
@@ -960,7 +1201,8 @@ def history_detail(history_id):
 def roles_page():
     db = get_db()
     servers = db.execute("SELECT * FROM servers ORDER BY name").fetchall()
-    return render_template("roles.html", servers=servers)
+    privileges = sorted(p for p in _ALLOWED_PRIVILEGES if p not in ("ALL", "ALL PRIVILEGES"))
+    return render_template("roles.html", servers=servers, privileges=privileges, all_privileges=["ALL", "ALL PRIVILEGES"])
 
 
 @app.route("/roles/<int:server_id>/sync", methods=["POST"])
@@ -1110,6 +1352,94 @@ def roles_grant():
     return jsonify({"ok": True, "results": results})
 
 
+@app.route("/roles/grant-privs", methods=["POST"])
+@auth_required
+@csrf_protect
+def roles_grant_privs():
+    data = request.get_json()
+    server_ids = data.get("server_ids", [])
+    role_name = data.get("role_name", "").strip()
+    privileges = data.get("privileges", "").strip()
+    raw_dbs = data.get("databases", "")
+
+    if not role_name or not privileges or not server_ids:
+        return jsonify({"ok": False, "error": "Preencha role, privilégios e selecione servidores."})
+
+    try:
+        role_name = _validate_role_name(role_name)
+        validated_privs = _validate_privileges(privileges)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+    if isinstance(raw_dbs, str):
+        selected_dbs = [d.strip() for d in raw_dbs.split(",") if d.strip()]
+    else:
+        selected_dbs = [str(d).strip() for d in (raw_dbs or []) if str(d).strip()]
+
+    global_priv, db_priv = _split_privileges(validated_privs)
+
+    db = get_db()
+    results = []
+
+    for sid in server_ids:
+        sid = int(sid)
+        server = db.execute("SELECT * FROM servers WHERE id = %s", (sid,)).fetchone()
+        if not server:
+            continue
+
+        dbs = selected_dbs
+        if not dbs:
+            available = db.execute(
+                "SELECT database_name FROM server_databases WHERE server_id = %s",
+                (sid,),
+            ).fetchall()
+            dbs = [r["database_name"] for r in available]
+
+        if not dbs and db_priv:
+            results.append({
+                "server_name": server["name"],
+                "ok": False,
+                "error": "Nenhuma database disponível — execute Refresh primeiro.",
+            })
+            continue
+
+        try:
+            execute_grant(dict(server), role_name, "%", validated_privs, dbs)
+            db.execute(
+                "INSERT IGNORE INTO roles (server_id, role_name) VALUES (%s, %s)",
+                (sid, role_name),
+            )
+            parts = []
+            if global_priv:
+                parts.append(f"GRANT {global_priv} ON *.* TO '{role_name}'")
+            if db_priv and dbs:
+                parts.append(f"GRANT {db_priv} ON {', '.join('`' + d + '`.*' for d in dbs)} TO '{role_name}'")
+            stmt = "; ".join(parts)
+            db.execute(
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, grant_type) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'role')",
+                (sid, server["name"], role_name, "%", validated_privs, json.dumps(dbs), stmt),
+            )
+            db.commit()
+            results.append({"server_name": server["name"], "ok": True})
+        except Exception as e:
+            parts = []
+            if global_priv:
+                parts.append(f"GRANT {global_priv} ON *.* TO '{role_name}'")
+            if db_priv and dbs:
+                parts.append(f"GRANT {db_priv} ON {', '.join('`' + d + '`.*' for d in dbs)} TO '{role_name}'")
+            stmt = "; ".join(parts)
+            db.execute(
+                "INSERT INTO grant_history (server_id, server_name, grantee_user, grantee_host, privileges, `databases`, grant_statement, success, error_message, grant_type) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, 'role')",
+                (sid, server["name"], role_name, "%", validated_privs, json.dumps(dbs), stmt, str(e)),
+            )
+            db.commit()
+            results.append({"server_name": server["name"], "ok": False, "error": str(e)})
+
+    return jsonify({"ok": True, "results": results})
+
+
 @app.route("/roles/revoke", methods=["POST"])
 @auth_required
 @csrf_protect
@@ -1175,6 +1505,25 @@ def roles_drop(server_id):
         return jsonify({"ok": False, "error": "Server not found"}), 404
 
     try:
+        role = _validate_role_name(role_name)
+        conn = mysql_connect(dict(server))
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT TO_USER, TO_HOST FROM mysql.role_edges WHERE FROM_USER = %s",
+                    (role,),
+                )
+                assigned = cur.fetchall()
+        finally:
+            conn.close()
+
+        if assigned:
+            users = ", ".join(f"'{r[0]}'@'{r[1]}'" for r in assigned)
+            return jsonify({
+                "ok": False,
+                "error": f"Não é possível excluir a role '{role_name}' pois está atribuída a: {users}. Revogue antes de excluir.",
+            })
+
         mysql_drop_role(dict(server), role_name)
         db.execute("DELETE FROM roles WHERE server_id = %s AND role_name = %s", (server_id, role_name))
         db.execute("DELETE FROM role_grants WHERE server_id = %s AND role_name = %s", (server_id, role_name))

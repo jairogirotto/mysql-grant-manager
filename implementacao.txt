@@ -1,0 +1,45 @@
+Estudo detalhado
+Onde está hoje
+- Aba "Conceder Grants To Role" = grant-privs-tab em templates/roles.html:68-108.
+- Databases hoje = um input de texto livre #grantprivs-databases (roles.html:90-91), separado por vírgula. Vazio = todas as DBs do servidor.
+- Servidores = checkboxes .server-check-grantprivs (roles.html:94-102), sem nenhuma busca de databases.
+- Envio: grantPrivsToRole() em roles.html:278-296 manda {role_name, privileges, databases: "<string>", server_ids} para /roles/grant-privs.
+O que já existe e pode ser reaproveitado (achados importantes)
+1. O endpoint de databases já existe: GET /servers/<id>/databases em mgm.py:633 retorna ["db1","db2",...] (lido do cache server_databases). Não precisa criar backend para listar DBs.
+2. O backend já aceita lista: em mgm.py:1374-1377, raw_dbs é tratado tanto como string (split por vírgula) quanto como array. Ou seja, se o front passar databases como array, o backend funciona sem alteração.
+3. Padrão de referência pronto: templates/grants.html já faz exatamente o "marcar servidor → buscar DBs → renderizar lista" em loadDatabasesForServer (402) e refreshServerSelection (409). Dá pra copiar a mecânica.
+4. Sem libs: projeto é Flask + Jinja + JS puro, sem framework e sem nenhuma lib de drag-and-drop. O DnD terá que usar a HTML5 Drag and Drop API nativa.
+Ponto de design crítico
+No backend de role (mgm.py:1384-1396), a lista de databases é global para todos os servidores selecionados (o mesmo array é aplicado a cada server; vazio = cai pro fallback "todas as DBs daquele server"). Isso difere do grants.html, que monta um mapa por servidor.
+Decisão necessária: a "caixa de databases" será global (uma só caixa, igual à semântica atual) ou por servidor? Recomendo global para manter compatível com o backend atual e evitar mudança de schema/rota.
+Roteiro de implementação
+Fase 1 — Decisões (antes de codar)
+- Caixa global vs por-servidor → recomendo global.
+- Caixa vazia = "todas as databases" (mantém conveniência atual do fallback) ou exige seleção explícita? → recomendo manter "vazia = todas", com aviso visual.
+- Suportar clique como fallback do arraste (mobile/teclado/acessibilidade)? → recomendo sim.
+Fase 2 — Markup (roles.html, dentro do grant-privs-tab)
+- Remover/substituir o input de texto #grantprivs-databases (linhas 90-91) por um bloco de 2 painéis:
+- Painel origem ("Databases disponíveis"): itens/chips arrastáveis, agrupados por servidor selecionado.
+- Painel destino ("Databases selecionadas"): a drop zone (a "caixa").
+- Adicionar área de aviso "Nenhuma DB — rode Refresh" (espelhar no-db-warning do grants.html).
+- Botões auxiliares: "Adicionar todas", "Limpar caixa".
+Fase 3 — JS (bloco <script> do roles.html)
+- Listener change em .server-check-grantprivs → ao marcar/desmarcar, buscar DBs via GET /servers/<id>/databases e (re)montar o painel origem (reusar lógica de grants.html:402-456).
+- Handlers de DnD nativo: dragstart (set dataTransfer com nome da DB + server), dragover (preventDefault), dragenter/dragleave (classe de hover), drop (adicionar à caixa).
+- Fallback click-to-add no item de origem e click-to-remove (botão "x") no item da caixa.
+- Estado em um Set para deduplicar DBs na caixa.
+- getSelectedRoleDatabases() → retorna array de nomes.
+- Alterar grantPrivsToRole() (roles.html:278-296) para enviar databases: getSelectedRoleDatabases() (array) em vez do .value do input.
+Fase 4 — CSS (static/style.css)
+- Estilos para chips arrastáveis, painel origem, drop zone com estado :hover/.dragover, e estado vazio. Reaproveitar os tokens/variáveis CSS já existentes (estética dark "command center").
+Fase 5 — Backend (mgm.py)
+- Nenhuma mudança obrigatória — /roles/grant-privs (1355) já aceita array (1374-1377) e já tem fallback "vazio = todas" (1390-1396). (Opcional: ajustar mensagem/semântica se decidirmos exigir seleção explícita.)
+Fase 6 — Casos de borda a tratar no JS
+- Desmarcar servidor → remover suas DBs do painel origem (e decidir se remove da caixa as que não pertencem mais a nenhum server selecionado).
+- Servidor sem DBs em cache → mostrar aviso de Refresh.
+- Mesmo nome de DB em servidores diferentes → dedupe no Set.
+- Arrastar DB já presente → não duplicar.
+- Nenhum servidor selecionado → esconder os painéis.
+Fase 7 — Teste manual
+- App é Flask; rodar localmente, marcar servidores, conferir busca de DBs, arrastar/soltar, clicar fallback, limpar, e validar o GRANT no fluxo /roles/grant-privs.
+Resumo do esforço: ~90% frontend (roles.html + style.css), 0% backend obrigatório, reutilizando endpoint e padrão já existentes. Quer que eu detalhe a Fase 2/3 com o HTML/JS concreto, ou já parto para a implementação

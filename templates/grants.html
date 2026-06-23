@@ -8,6 +8,7 @@
     <button class="tab-btn active" onclick="switchTab('list-users-tab', this)">Listar Usuários</button>
     <button class="tab-btn" onclick="switchTab('create-user-tab', this)">Criar Usuário</button>
     <button class="tab-btn" onclick="switchTab('grant-tab', this)">Conceder Privilégios</button>
+    <button class="tab-btn" onclick="switchTab('revoke-tab', this)">Revogar Privilégios</button>
 </div>
 
 <!-- ===== Listar Usuários ===== -->
@@ -35,6 +36,8 @@
     <label>Usuário MySQL: <input id="create-user-name" placeholder="app_user"></label>
     <label>Host de origem: <input id="create-user-host" value="%" placeholder="% ou 10.0.0.5"></label>
     <label>Senha: <input id="create-user-password" type="password" placeholder="Senha para o novo usuário"></label>
+    <label>Confirmar Senha: <input id="create-user-confirm-password" type="password" placeholder="Repita a senha"></label>
+    <small id="create-user-pass-warn" style="color:var(--red);display:none">As senhas nao conferem.</small>
 
     <h4>Servidores</h4>
     <div class="server-checkboxes">
@@ -122,6 +125,91 @@
         <div id="result-content"></div>
     </div>
 </div>
+
+<!-- ===== Revogar Privilégios ===== -->
+<div id="revoke-tab" class="form-card tab-content" style="display:none">
+    <h3>Revogar Privilégios</h3>
+
+    <div class="flex-gap" style="margin-bottom:0.5rem;align-items:center">
+        <label style="margin:0">Servidor:
+            <select id="revoke-server" onchange="loadRevokeUsers()" style="width:auto;margin-left:4px">
+                <option value="">-- selecione --</option>
+                {% for s in servers %}
+                <option value="{{ s.id }}">{{ s.name }} ({{ s.host }})</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label style="margin:0">Usuário:
+            <select id="revoke-user-select" onchange="onRevokeUserChange()" style="width:auto;margin-left:4px">
+                <option value="">-- selecione servidor --</option>
+            </select>
+        </label>
+        <button class="btn btn-primary btn-sm" onclick="loadCurrentGrants()">Carregar Grants</button>
+    </div>
+
+    <div id="revoke-current-grants" style="display:none" class="mt-1">
+        <h4>Grants atuais</h4>
+        <pre id="revoke-grants-display" style="font-size:0.78rem;max-height:150px;overflow-y:auto"></pre>
+    </div>
+
+    <div id="revoke-options" style="display:none" class="mt-2">
+        <label style="display:inline-flex;align-items:center;gap:6px;margin-bottom:0.8rem;cursor:pointer">
+            <input type="checkbox" id="revoke-all-check" onchange="onRevokeAllToggle()">
+            <strong style="color:var(--red)">Revogar TODOS os privilégios (deixar apenas USAGE)</strong>
+        </label>
+
+        <div id="revoke-granular">
+            <h4>Privilégios para revogar</h4>
+            <div class="priv-group" id="revoke-priv-group">
+                <p class="text-muted" style="font-size:0.82rem">Carregue os grants de um usuário para listar os privilégios atuais.</p>
+            </div>
+
+            <h4>Servidores</h4>
+            <div class="server-checkboxes">
+                {% for s in servers %}
+                <label class="server-row">
+                    <input type="checkbox" class="server-check-revoke" value="{{ s.id }}" data-name="{{ s.name }}">
+                    <strong>{{ s.name }}</strong>
+                    <code>{{ s.host }}:{{ s.port }}</code>
+                    <span class="db-count" id="revoke-db-count-{{ s.id }}">-</span>
+                </label>
+                {% endfor %}
+            </div>
+
+            <div id="revoke-db-selectors" style="display:none" class="mt-2">
+                <h4>Databases por servidor</h4>
+                <div id="revoke-per-server-dbs"></div>
+            </div>
+        </div>
+
+        <div id="revoke-all-servers" style="display:none">
+            <h4>Servidores</h4>
+            <div class="server-checkboxes">
+                {% for s in servers %}
+                <label class="server-row">
+                    <input type="checkbox" class="server-check-revoke-all" value="{{ s.id }}" data-name="{{ s.name }}">
+                    <strong>{{ s.name }}</strong>
+                    <code>{{ s.host }}:{{ s.port }}</code>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="mt-2 flex-gap">
+            <button class="btn btn-primary" onclick="previewRevoke()">Preview</button>
+            <button class="btn btn-danger" onclick="executeRevoke()">Executar Revoke</button>
+        </div>
+
+        <div id="revoke-preview-area" style="display:none" class="mt-2">
+            <h3>Preview</h3>
+            <div id="revoke-preview-content"></div>
+        </div>
+        <div id="revoke-result-area" style="display:none" class="mt-2">
+            <h3>Resultado</h3>
+            <div id="revoke-result-content"></div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -152,14 +240,31 @@ async function loadServerUsers() {
             content.innerHTML = '<p class="text-muted">Nenhum usuário encontrado.</p>';
             return;
         }
-        var html = '<table><thead><tr><th>Usuário</th><th>Tipo</th><th style="width:80px;text-align:center">Ações</th></tr></thead><tbody>';
+        var html = '<table><thead><tr><th>Usuário</th><th>Tipo</th><th style="width:200px;text-align:center">Ações</th></tr></thead><tbody>';
         d.users.forEach(function(u) {
             var parts = u.user_host.split('@');
             var user = parts[0];
             var host = parts.slice(1).join('@');
+            var typeBadge = '';
+            if (u.is_role) {
+                typeBadge = '<span class="badge" style="background:var(--purple-muted);color:var(--purple)">ROLE</span>';
+            } else if (u.locked) {
+                typeBadge = '<span class="badge" style="background:var(--cyan-muted);color:var(--cyan)">USUÁRIO</span> <span class="badge" style="background:var(--red-muted,rgba(255,50,50,0.12));color:var(--red,#ff5555)">LOCKED</span>';
+            } else {
+                typeBadge = '<span class="badge" style="background:var(--cyan-muted);color:var(--cyan)">USUÁRIO</span>';
+            }
             html += '<tr><td><code class="user-grant-hover" data-server="' + sid + '" data-user="' + user + '" data-host="' + host + '" onmouseenter="showGrantTooltip(event, this)" onmouseleave="hideGrantTooltip()">' + u.user_host + '</code></td>';
-            html += '<td>' + (u.is_role ? '<span class="badge" style="background:var(--purple-muted);color:var(--purple)">ROLE</span>' : '<span class="badge" style="background:var(--cyan-muted);color:var(--cyan)">USUÁRIO</span>') + '</td>';
-            html += '<td style="text-align:center"><button class="btn btn-danger btn-sm" onclick="deleteUser(' + sid + ',\'' + user + '\',\'' + host + '\')">Excluir</button></td></tr>';
+            html += '<td>' + typeBadge + '</td>';
+            html += '<td style="text-align:center">';
+            if (!u.is_role) {
+                if (u.locked) {
+                    html += '<button class="btn btn-sm btn-refresh" onclick="toggleLockUser(' + sid + ',\'' + user + '\',\'' + host + '\',\'unlock\')">Unlock</button> ';
+                } else {
+                    html += '<button class="btn btn-sm btn-test" onclick="toggleLockUser(' + sid + ',\'' + user + '\',\'' + host + '\',\'lock\')">Lock</button> ';
+                }
+            }
+            html += '<button class="btn btn-danger btn-sm" onclick="deleteUser(' + sid + ',\'' + user + '\',\'' + host + '\')">Excluir</button>';
+            html += '</td></tr>';
         });
         html += '</tbody></table>';
         content.innerHTML = html;
@@ -177,6 +282,22 @@ async function deleteUser(serverId, user, host) {
     });
     var d = await r.json();
     showToast(d.ok ? 'Usuário excluído.' : 'Erro: ' + d.error, d.ok);
+    if (d.ok) loadServerUsers();
+}
+
+async function toggleLockUser(serverId, user, host, action) {
+    var msg = action === 'lock'
+        ? 'Bloquear (LOCK) o usuário ' + user + '@' + host + '? O usuário não poderá mais se conectar.'
+        : 'Desbloquear (UNLOCK) o usuário ' + user + '@' + host + '? O usuário poderá se conectar novamente.';
+    if (!confirm(msg)) return;
+    var r = await fetch('/servers/' + serverId + '/users/lock', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
+        body: JSON.stringify({grantee_user: user, grantee_host: host, action: action})
+    });
+    var d = await r.json();
+    var successMsg = action === 'lock' ? 'Usuário bloqueado.' : 'Usuário desbloqueado.';
+    showToast(d.ok ? successMsg : 'Erro: ' + d.error, d.ok);
     if (d.ok) loadServerUsers();
 }
 
@@ -252,11 +373,16 @@ async function createUserPreview() {
 async function createUserExecute() {
     var user = document.getElementById('create-user-name').value.trim();
     var host = document.getElementById('create-user-host').value.trim() || '%';
-    var password = document.getElementById('create-user-password').value.trim();
+    var password = document.getElementById('create-user-password').value;
+    var confirmPassword = document.getElementById('create-user-confirm-password').value;
     var serverIds = getChecked('server-check-create');
 
     if (!user || !password || serverIds.length === 0) {
         showToast('Preencha usuário, senha e selecione servidores.', false);
+        return;
+    }
+    if (password !== confirmPassword) {
+        showToast('As senhas nao conferem.', false);
         return;
     }
     if (!confirm('Criar usuário ' + user + '@' + host + ' nos servidores selecionados?')) return;
@@ -456,6 +582,322 @@ async function executeGrants() {
     content.innerHTML = html;
     area.style.display = 'block';
     document.getElementById('preview-area').style.display = 'none';
+}
+
+// ===== Revogar Privilégios =====
+var ALL_GRANULAR_PRIVS = {{ privileges|tojson }};
+
+function parseUserPrivileges(grants) {
+    var privs = new Set();
+    var hasAll = false;
+    grants.forEach(function(stmt) {
+        var m = /^GRANT\s+(.+?)\s+ON\s+/i.exec(stmt);
+        if (!m) return;
+        m[1].split(',').forEach(function(p) {
+            var name = p.trim().toUpperCase().replace(/\s+/g, ' ');
+            if (!name || name === 'USAGE') return;
+            if (name === 'ALL' || name === 'ALL PRIVILEGES') { hasAll = true; return; }
+            privs.add(name);
+        });
+        if (/WITH\s+GRANT\s+OPTION/i.test(stmt)) privs.add('GRANT OPTION');
+    });
+    if (hasAll) {
+        ALL_GRANULAR_PRIVS.forEach(function(p) { privs.add(p); });
+    }
+    return privs;
+}
+
+function renderRevokePrivCheckboxes(grants) {
+    var group = document.getElementById('revoke-priv-group');
+    var privSet = parseUserPrivileges(grants);
+    var names = ALL_GRANULAR_PRIVS.filter(function(p) { return privSet.has(p); });
+    privSet.forEach(function(p) { if (names.indexOf(p) === -1) names.push(p); });
+
+    if (names.length === 0) {
+        group.innerHTML = '<p class="text-muted" style="font-size:0.82rem">Este usuário não possui privilégios granulares para revogar. Use a opção "Revogar TODOS" se necessário.</p>';
+        return;
+    }
+    var html = '';
+    names.forEach(function(p) {
+        html += '<label style="display:inline-flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer">'
+            + '<input type="checkbox" class="revoke-priv-check" value="' + p + '"> ' + p + '</label>';
+    });
+    group.innerHTML = html;
+}
+
+async function loadRevokeUsers() {
+    var sid = document.getElementById('revoke-server').value;
+    var sel = document.getElementById('revoke-user-select');
+    sel.innerHTML = '<option value="">-- carregando --</option>';
+    document.getElementById('revoke-current-grants').style.display = 'none';
+    document.getElementById('revoke-options').style.display = 'none';
+
+    if (!sid) {
+        sel.innerHTML = '<option value="">-- selecione servidor --</option>';
+        return;
+    }
+    try {
+        var r = await fetch('/servers/' + sid + '/users');
+        var d = await r.json();
+        if (!d.ok) {
+            sel.innerHTML = '<option value="">Erro</option>';
+            return;
+        }
+        var html = '<option value="">-- selecione --</option>';
+        d.users.forEach(function(u) {
+            if (!u.is_role) {
+                html += '<option value="' + u.user_host + '">' + u.user_host + '</option>';
+            }
+        });
+        sel.innerHTML = html;
+    } catch(e) {
+        sel.innerHTML = '<option value="">Erro ao carregar</option>';
+    }
+}
+
+function onRevokeUserChange() {
+    var sid = document.getElementById('revoke-server').value;
+    var userHost = document.getElementById('revoke-user-select').value;
+    if (sid && userHost) {
+        loadCurrentGrants();
+    } else {
+        document.getElementById('revoke-current-grants').style.display = 'none';
+        document.getElementById('revoke-options').style.display = 'none';
+    }
+}
+
+async function loadCurrentGrants() {
+    var sid = document.getElementById('revoke-server').value;
+    var userHost = document.getElementById('revoke-user-select').value;
+    if (!sid || !userHost) {
+        showToast('Selecione servidor e usuário.', false);
+        return;
+    }
+    var parts = userHost.split('@');
+    var user = parts[0];
+    var host = parts.slice(1).join('@');
+
+    try {
+        var r = await fetch('/servers/' + sid + '/users/' + user + '/' + host + '/grants');
+        var d = await r.json();
+        if (!d.ok) {
+            showToast('Erro: ' + d.error, false);
+            return;
+        }
+        var display = document.getElementById('revoke-grants-display');
+        display.textContent = d.grants.length > 0 ? d.grants.join('\n') : 'Nenhum grant encontrado.';
+        document.getElementById('revoke-current-grants').style.display = 'block';
+        document.getElementById('revoke-options').style.display = 'block';
+        renderRevokePrivCheckboxes(d.grants);
+
+        var serverCheck = document.querySelector('.server-check-revoke[value="' + sid + '"]');
+        if (serverCheck) serverCheck.checked = true;
+        var serverCheckAll = document.querySelector('.server-check-revoke-all[value="' + sid + '"]');
+        if (serverCheckAll) serverCheckAll.checked = true;
+        refreshRevokeServerSelection();
+    } catch(e) {
+        showToast('Erro ao buscar grants.', false);
+    }
+}
+
+function onRevokeAllToggle() {
+    var checked = document.getElementById('revoke-all-check').checked;
+    document.getElementById('revoke-granular').style.display = checked ? 'none' : 'block';
+    document.getElementById('revoke-all-servers').style.display = checked ? 'block' : 'none';
+}
+
+async function refreshRevokeServerSelection() {
+    var checked = document.querySelectorAll('.server-check-revoke:checked');
+    var container = document.getElementById('revoke-per-server-dbs');
+    var area = document.getElementById('revoke-db-selectors');
+
+    if (checked.length === 0) {
+        area.style.display = 'none';
+        return;
+    }
+
+    container.innerHTML = '';
+    for (var i = 0; i < checked.length; i++) {
+        var cb = checked[i];
+        var sid = cb.value;
+        var name = cb.dataset.name;
+        var r = await fetch('/servers/' + sid + '/databases');
+        var dbs = await r.json();
+        document.getElementById('revoke-db-count-' + sid).textContent = dbs.length + ' DBs';
+
+        var div = document.createElement('div');
+        div.className = 'server-db-group';
+        div.innerHTML = '<strong>' + name + '</strong>';
+
+        if (dbs.length === 0) {
+            div.innerHTML += ' <em style="color:var(--red)">Nenhuma DB &mdash; execute Refresh</em>';
+        } else {
+            var selectAll = document.createElement('label');
+            selectAll.innerHTML = '<input type="checkbox" class="revoke-db-select-all" onchange="toggleAllRevokeDbs(this, ' + sid + ')"> Todas';
+            div.appendChild(selectAll);
+
+            dbs.forEach(function(db) {
+                var lbl = document.createElement('label');
+                lbl.innerHTML = '<input type="checkbox" class="revoke-db-check" data-server="' + sid + '" value="' + db + '"> ' + db;
+                div.appendChild(lbl);
+            });
+        }
+        container.appendChild(div);
+    }
+    area.style.display = 'block';
+}
+
+function toggleAllRevokeDbs(el, sid) {
+    document.querySelectorAll('.revoke-db-check[data-server="' + sid + '"]').forEach(function(cb) {
+        cb.checked = el.checked;
+    });
+}
+
+document.querySelectorAll('.server-check-revoke').forEach(function(cb) {
+    cb.addEventListener('change', refreshRevokeServerSelection);
+});
+
+function getRevokeUserHost() {
+    var userHost = document.getElementById('revoke-user-select').value;
+    if (!userHost) return {user: '', host: '%'};
+    var parts = userHost.split('@');
+    return {user: parts[0], host: parts.slice(1).join('@') || '%'};
+}
+
+function getRevokeSelectedPrivileges() {
+    var checked = document.querySelectorAll('.revoke-priv-check:checked');
+    return Array.from(checked).map(function(cb) { return cb.value; }).join(', ');
+}
+
+function getRevokeSelectedDatabases() {
+    var result = {};
+    document.querySelectorAll('.revoke-db-check:checked').forEach(function(cb) {
+        var sid = cb.dataset.server;
+        if (!result[sid]) result[sid] = [];
+        result[sid].push(cb.value);
+    });
+    document.querySelectorAll('.server-check-revoke:checked').forEach(function(cb) {
+        if (!result[cb.value]) result[cb.value] = [];
+    });
+    return result;
+}
+
+async function previewRevoke() {
+    var uh = getRevokeUserHost();
+    if (!uh.user) { showToast('Selecione um usuário.', false); return; }
+
+    var revokeAll = document.getElementById('revoke-all-check').checked;
+    var serverIds;
+    if (revokeAll) {
+        serverIds = Array.from(document.querySelectorAll('.server-check-revoke-all:checked')).map(function(cb) { return cb.value; });
+    } else {
+        serverIds = Array.from(document.querySelectorAll('.server-check-revoke:checked')).map(function(cb) { return cb.value; });
+    }
+
+    if (serverIds.length === 0) { showToast('Selecione ao menos um servidor.', false); return; }
+
+    var privileges = '';
+    if (!revokeAll) {
+        privileges = getRevokeSelectedPrivileges();
+        if (!privileges) { showToast('Selecione privilégios para revogar.', false); return; }
+    }
+
+    var payload = {
+        server_ids: serverIds,
+        grantee_user: uh.user,
+        grantee_host: uh.host,
+        privileges: privileges,
+        revoke_all: revokeAll,
+        databases: revokeAll ? {} : getRevokeSelectedDatabases()
+    };
+
+    var r = await fetch('/grants/revoke/preview', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
+        body: JSON.stringify(payload)
+    });
+    var d = await r.json();
+
+    var area = document.getElementById('revoke-preview-area');
+    var content = document.getElementById('revoke-preview-content');
+
+    if (!d.ok) {
+        content.innerHTML = '<div class="msg-err">' + d.error + '</div>';
+        area.style.display = 'block';
+        return;
+    }
+
+    var html = '';
+    d.preview.forEach(function(p) {
+        html += '<h4>' + p.server_name + ' (' + p.server_host + ')</h4>';
+        html += '<pre>' + p.statements.join('\n') + '</pre>';
+    });
+    content.innerHTML = html;
+    area.style.display = 'block';
+    document.getElementById('revoke-result-area').style.display = 'none';
+}
+
+async function executeRevoke() {
+    if (!confirm('Confirma a revogação dos privilégios? Esta ação não pode ser desfeita.')) return;
+
+    var uh = getRevokeUserHost();
+    if (!uh.user) { showToast('Selecione um usuário.', false); return; }
+
+    var revokeAll = document.getElementById('revoke-all-check').checked;
+    var serverIds;
+    if (revokeAll) {
+        serverIds = Array.from(document.querySelectorAll('.server-check-revoke-all:checked')).map(function(cb) { return cb.value; });
+    } else {
+        serverIds = Array.from(document.querySelectorAll('.server-check-revoke:checked')).map(function(cb) { return cb.value; });
+    }
+
+    if (serverIds.length === 0) { showToast('Selecione ao menos um servidor.', false); return; }
+
+    var privileges = '';
+    if (!revokeAll) {
+        privileges = getRevokeSelectedPrivileges();
+        if (!privileges) { showToast('Selecione privilégios para revogar.', false); return; }
+    }
+
+    var payload = {
+        server_ids: serverIds,
+        grantee_user: uh.user,
+        grantee_host: uh.host,
+        privileges: privileges,
+        revoke_all: revokeAll,
+        databases: revokeAll ? {} : getRevokeSelectedDatabases()
+    };
+
+    var r = await fetch('/grants/revoke/execute', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCSRFToken()},
+        body: JSON.stringify(payload)
+    });
+    var d = await r.json();
+
+    var area = document.getElementById('revoke-result-area');
+    var content = document.getElementById('revoke-result-content');
+
+    if (!d.ok) {
+        content.innerHTML = '<div class="msg-err">' + d.error + '</div>';
+        area.style.display = 'block';
+        return;
+    }
+
+    var html = '<ul>';
+    d.results.forEach(function(r) {
+        html += '<li><strong>' + r.server_name + '</strong>: ';
+        html += r.ok ? '<span class="badge badge-ok">OK</span>' : '<span class="badge badge-err">ERRO: ' + r.error + '</span>';
+        html += '</li>';
+    });
+    html += '</ul>';
+    content.innerHTML = html;
+    area.style.display = 'block';
+    document.getElementById('revoke-preview-area').style.display = 'none';
+    if (d.results.some(function(r) { return r.ok; })) {
+        showToast('Privilégios revogados.', true);
+        loadCurrentGrants();
+    }
 }
 </script>
 {% endblock %}
