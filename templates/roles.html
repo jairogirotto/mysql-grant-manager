@@ -39,7 +39,16 @@
 <div id="grant-tab" class="form-card tab-content" style="display:none">
     <h3>Conceder Role a Usuário</h3>
 
-    <label>Role: <input id="grant-role-name" placeholder="app_readonly"></label>
+    <label>Role: <input id="grant-role-name" placeholder="app_readonly" oninput="onGrantRoleInputChange()"></label>
+
+    <div id="grant-role-area" style="display:none" class="mt-1">
+        <div id="grant-role-pool" class="gp-db-pool"></div>
+        <small style="color:var(--text-muted);margin-top:4px;display:block">
+            Clique em uma role para seleciona-la, ou digite manualmente no campo acima.
+            Roles nao sincronizadas nao aparecem aqui — use a aba Visualizar Roles &gt; Sync.
+        </small>
+    </div>
+
     <label>Usuário MySQL: <input id="grant-grantee-user" placeholder="app_user"></label>
     <label>Host de origem: <input id="grant-grantee-host" value="%" placeholder="%"></label>
     <label style="font-weight:400">
@@ -51,7 +60,7 @@
     <div class="server-checkboxes">
         {% for s in servers %}
         <label class="server-row">
-            <input type="checkbox" class="server-check-grant" value="{{ s.id }}">
+            <input type="checkbox" class="server-check-grant" value="{{ s.id }}" data-name="{{ s.name }}">
             <strong>{{ s.name }}</strong>
             <code>{{ s.host }}:{{ s.port }}</code>
         </label>
@@ -223,6 +232,77 @@ async function createRole() {
     showResult('create-result', d);
     if (d.ok) showToast('Roles criadas.', true);
 }
+
+var grantSelectedRole = null;
+
+async function refreshGrantRoleSelection() {
+    var checked = document.querySelectorAll('.server-check-grant:checked');
+    var area = document.getElementById('grant-role-area');
+    var pool = document.getElementById('grant-role-pool');
+
+    if (checked.length === 0) {
+        area.style.display = 'none';
+        return;
+    }
+    area.style.display = 'block';
+
+    var allRoleNames = new Set();
+    for (var i = 0; i < checked.length; i++) {
+        var sid = checked[i].value;
+        var roles = await loadGpRoles(sid);
+        roles.forEach(function(r) { allRoleNames.add(r); });
+    }
+
+    pool.innerHTML = '';
+
+    if (allRoleNames.size === 0) {
+        var em = document.createElement('em');
+        em.style.cssText = 'color:var(--red);font-size:0.72rem;padding:0.35rem 0';
+        em.textContent = 'Nenhuma role sincronizada — use a aba Visualizar Roles > Sync';
+        pool.appendChild(em);
+    } else {
+        allRoleNames.forEach(function(role) {
+            var chip = document.createElement('span');
+            chip.className = 'gp-chip';
+            if (grantSelectedRole === role) chip.classList.add('role-selected');
+            chip.textContent = role;
+            chip.setAttribute('tabindex', '0');
+            chip.setAttribute('role', 'button');
+            chip.title = 'Clique para selecionar ' + role;
+            chip.addEventListener('click', function() { selectGrantRole(role); });
+            chip.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectGrantRole(role); } });
+            pool.appendChild(chip);
+        });
+    }
+}
+
+function selectGrantRole(roleName) {
+    grantSelectedRole = roleName;
+    document.getElementById('grant-role-name').value = roleName;
+    document.querySelectorAll('#grant-role-pool .gp-chip').forEach(function(chip) {
+        if (chip.textContent === roleName) {
+            chip.classList.add('role-selected');
+        } else {
+            chip.classList.remove('role-selected');
+        }
+    });
+}
+
+function onGrantRoleInputChange() {
+    var current = document.getElementById('grant-role-name').value.trim();
+    if (current !== grantSelectedRole) {
+        grantSelectedRole = null;
+        document.querySelectorAll('#grant-role-pool .gp-chip').forEach(function(chip) {
+            chip.classList.remove('role-selected');
+        });
+    }
+}
+
+document.querySelectorAll('.server-check-grant').forEach(function(cb) {
+    cb.addEventListener('change', function() {
+        refreshGrantRoleSelection();
+    });
+});
 
 async function grantRole() {
     var role = document.getElementById('grant-role-name').value.trim();
