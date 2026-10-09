@@ -119,20 +119,39 @@ def _safe_identifier(value):
     return "`" + str(value).replace("`", "``") + "`"
 
 
-# Privilégios de nível de database/tabela aceitos em `GRANT <priv> ON db.*`.
+# Privilégios aceitos em `GRANT <priv> ON ...`.
 # Fonte: https://dev.mysql.com/doc/refman/8.0/en/privileges-provided.html
 _ALLOWED_PRIVILEGES = {
     "ALL", "ALL PRIVILEGES",
     "ALTER", "ALTER ROUTINE",
-    "CREATE", "CREATE ROUTINE", "CREATE TEMPORARY TABLES",
-    "CREATE VIEW", "DELETE", "DROP", "EVENT", "EXECUTE",
-    "GRANT OPTION", "INDEX", "INSERT", "LOCK TABLES",
-    "REFERENCES", "REPLICATION SLAVE", "SELECT", "SHOW VIEW",
-    "TRIGGER", "UPDATE",
+    "CREATE", "CREATE ROLE", "CREATE ROUTINE", "CREATE TABLESPACE",
+    "CREATE TEMPORARY TABLES", "CREATE USER", "CREATE VIEW",
+    "DELETE", "DROP", "DROP ROLE",
+    "EVENT", "EXECUTE",
+    "FILE",
+    "GRANT OPTION",
+    "INDEX", "INSERT",
+    "LOCK TABLES",
+    "PROCESS",
+    "REFERENCES", "RELOAD", "REPLICATION CLIENT", "REPLICATION SLAVE",
+    "SELECT", "SHOW DATABASES", "SHOW VIEW", "SHOW_ROUTINE", "SHUTDOWN", "SUPER",
+    "TRIGGER",
+    "UPDATE",
 }
 
 _GLOBAL_PRIVILEGES = {
     "REPLICATION SLAVE",
+    "CREATE ROLE",
+    "CREATE TABLESPACE",
+    "CREATE USER",
+    "DROP ROLE",
+    "FILE",
+    "PROCESS",
+    "RELOAD",
+    "REPLICATION CLIENT",
+    "SHOW DATABASES",
+    "SHUTDOWN",
+    "SUPER",
 }
 
 
