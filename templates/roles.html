@@ -49,7 +49,8 @@
         </small>
     </div>
 
-    <label>Usuário MySQL: <input id="grant-grantee-user" placeholder="app_user"></label>
+    <label>Usuário MySQL: <input id="grant-grantee-user" placeholder="app_user" autocomplete="off"></label>
+    <div id="grant-grantee-suggestions" class="gp-db-pool" style="display:none"></div>
     <label>Host de origem: <input id="grant-grantee-host" value="%" placeholder="%"></label>
     <label style="font-weight:400">
         <input type="checkbox" id="grant-set-default" checked style="width:auto">
@@ -302,6 +303,68 @@ document.querySelectorAll('.server-check-grant').forEach(function(cb) {
     cb.addEventListener('change', function() {
         refreshGrantRoleSelection();
     });
+});
+
+var granteeSearchTimer = null;
+
+async function searchGrantees() {
+    var input = document.getElementById('grant-grantee-user');
+    var q = input.value.trim();
+    var suggestBox = document.getElementById('grant-grantee-suggestions');
+    var serverIds = getChecked('server-check-grant');
+
+    if (q.length < 3 || serverIds.length === 0) {
+        suggestBox.style.display = 'none';
+        suggestBox.innerHTML = '';
+        return;
+    }
+
+    var results = [];
+    var seen = new Set();
+    for (var i = 0; i < serverIds.length; i++) {
+        var sid = serverIds[i];
+        var r = await fetch('/servers/' + sid + '/users?q=' + encodeURIComponent(q));
+        var d = await r.json();
+        if (!d.ok) continue;
+        d.users.forEach(function(u) {
+            if (u.is_role) return;
+            var key = u.user_host;
+            if (!seen.has(key)) {
+                seen.add(key);
+                results.push(u);
+            }
+        });
+    }
+
+    suggestBox.innerHTML = '';
+    if (results.length === 0) {
+        suggestBox.innerHTML = '<span class="gp-placeholder">Nenhum usuário encontrado.</span>';
+        suggestBox.style.display = 'block';
+        return;
+    }
+
+    results.slice(0, 30).forEach(function(u) {
+        var parts = u.user_host.split('@');
+        var user = parts[0];
+        var host = parts.slice(1).join('@');
+        var chip = document.createElement('span');
+        chip.className = 'gp-chip';
+        chip.textContent = u.user_host;
+        chip.title = 'Selecionar ' + u.user_host;
+        chip.addEventListener('click', function() {
+            document.getElementById('grant-grantee-user').value = user;
+            document.getElementById('grant-grantee-host').value = host;
+            suggestBox.style.display = 'none';
+            suggestBox.innerHTML = '';
+        });
+        suggestBox.appendChild(chip);
+    });
+    suggestBox.style.display = 'block';
+}
+
+document.getElementById('grant-grantee-user').addEventListener('input', function() {
+    if (granteeSearchTimer) clearTimeout(granteeSearchTimer);
+    granteeSearchTimer = setTimeout(searchGrantees, 250);
 });
 
 async function grantRole() {

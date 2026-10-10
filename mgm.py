@@ -524,14 +524,22 @@ def mysql_discover_role_grants(server):
         conn.close()
 
 
-def mysql_discover_users(server):
+def mysql_discover_users(server, q=None):
     conn = mysql_connect(server)
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT CONCAT(user, '@', host) as user_host, account_locked, "
-                "authentication_string FROM mysql.user ORDER BY user, host"
-            )
+            if q:
+                cur.execute(
+                    "SELECT CONCAT(user, '@', host) as user_host, account_locked, "
+                    "authentication_string FROM mysql.user "
+                    "WHERE user LIKE %s ORDER BY user, host",
+                    (q + "%",),
+                )
+            else:
+                cur.execute(
+                    "SELECT CONCAT(user, '@', host) as user_host, account_locked, "
+                    "authentication_string FROM mysql.user ORDER BY user, host"
+                )
             users = []
             for row in cur.fetchall():
                 locked = row[1] == 'Y'
@@ -671,8 +679,9 @@ def servers_users(server_id):
     server = db.execute("SELECT * FROM servers WHERE id = %s", (server_id,)).fetchone()
     if not server:
         return jsonify({"ok": False, "error": "Server not found"}), 404
+    q = (request.args.get("q") or "").strip()
     try:
-        users = mysql_discover_users(dict(server))
+        users = mysql_discover_users(dict(server), q)
         return jsonify({"ok": True, "users": users})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
