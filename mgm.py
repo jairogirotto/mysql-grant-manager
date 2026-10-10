@@ -509,9 +509,9 @@ def mysql_discover_roles(server):
 def mysql_discover_role_grants(server):
     conn = mysql_connect(server)
     try:
-        with conn.cursor() as cur:
+        with conn.cursor(pymysql.cursors.DictCursor) as cur:
             try:
-                cur.execute("SELECT FROM_USER as grantee_user, FROM_HOST as grantee_host, TO_USER as role_name FROM mysql.role_edges")
+                cur.execute("SELECT TO_USER as grantee_user, TO_HOST as grantee_host, FROM_USER as role_name FROM mysql.role_edges")
                 grants = [dict(row) for row in cur.fetchall()]
             except Exception:
                 grants = []
