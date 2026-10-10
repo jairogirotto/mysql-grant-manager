@@ -499,7 +499,11 @@ def mysql_discover_roles(server):
     conn = mysql_connect(server)
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT user FROM mysql.user WHERE account_locked = 'Y' AND host = '%' ORDER BY user")
+            cur.execute(
+                "SELECT user FROM mysql.user "
+                "WHERE host = '%' AND (authentication_string IS NULL OR authentication_string = '') "
+                "ORDER BY user"
+            )
             roles = [row[0] for row in cur.fetchall()]
         return roles
     finally:

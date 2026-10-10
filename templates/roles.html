@@ -674,19 +674,7 @@ async function loadRolesView() {
     }
     rolesEl.innerHTML = html;
 
-    html = '<h3>Grants de Roles</h3>';
-    if (d.grants.length === 0) {
-        html += '<p class="text-muted">Nenhum grant de role registrado.</p>';
-    } else {
-        html += '<table><thead><tr><th>Role</th><th>Usuário</th><th>Host</th></tr></thead><tbody>';
-        d.grants.forEach(function(g) {
-            html += '<tr><td><code>' + g.role_name + '</code></td>';
-            html += '<td><code>' + g.grantee_user + '</code></td>';
-            html += '<td><code>' + g.grantee_host + '</code></td></tr>';
-        });
-        html += '</tbody></table>';
-    }
-    grantsEl.innerHTML = html;
+    grantsEl.innerHTML = '';
 }
 </script>
 {% endblock %}
