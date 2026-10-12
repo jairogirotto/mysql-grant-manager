@@ -19,7 +19,7 @@ services:
       retries: 10
 
   app:
-    image: mgm:beta4
+    image: mgm:latest
     ports:
       - "5050:5050"
     environment:
